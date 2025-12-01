@@ -1,25 +1,19 @@
+import { Metadata } from 'next';
+import DeepLinkPage from '@/components/DeepLinkPage';
+
 interface WorkoutPageProps {
   params: { id: string };
 }
 
+export const metadata: Metadata = {
+  title: 'Open in OMR Hub',
+  description: 'Open this workout in the OMR Hub app',
+  other: {
+    'apple-itunes-app': 'app-id=6755069825',
+  },
+};
+
 export default function WorkoutDeepLinkPage({ params }: WorkoutPageProps) {
   const { id } = params;
-
-  return (
-    <main>
-      <h1>Open in OMR Hub</h1>
-      <p>Workout ID: {id}</p>
-      <p>
-        If you have the OMR Hub app installed, this link should open directly
-        in the app. If not, you can download it from the App Store:
-      </p>
-      <a href="https://apps.apple.com/gb/app/omr-hub/id6755069825">
-        Open in App Store
-      </a>
-    </main>
-  );
+  return <DeepLinkPage type="workouts" id={id} />;
 }
-
-
-
-
