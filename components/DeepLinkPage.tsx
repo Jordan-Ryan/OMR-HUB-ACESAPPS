@@ -11,7 +11,9 @@ export default function DeepLinkPage({
   id,
   appStoreUrl = 'https://apps.apple.com/gb/app/omr-hub/id6755069825'
 }: DeepLinkPageProps) {
-  const deepLinkUrl = `omrhub://a/${type}/${id}`;
+  // Use Universal Link URL - this will trigger Universal Links automatically
+  // If app is installed, iOS will open it. If not, it stays on the page.
+  const universalLinkUrl = `https://omrhub.acesapps.com/a/${type}/${id}`;
   const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
   const singularType = type.slice(0, -1); // Remove 's' from activities/events/workouts
 
@@ -119,7 +121,7 @@ export default function DeepLinkPage({
           marginBottom: '32px',
         }}>
           <a
-            href={deepLinkUrl}
+            href={universalLinkUrl}
             style={{
               display: 'inline-block',
               padding: '16px',
@@ -140,12 +142,6 @@ export default function DeepLinkPage({
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.opacity = '1';
-            }}
-            onClick={(e) => {
-              // Try deep link, fallback to app store after delay
-              setTimeout(() => {
-                window.location.href = appStoreUrl;
-              }, 500);
             }}
           >
             Open in App
