@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 interface DeepLinkPageProps {
   type: 'activities' | 'events' | 'workouts';
   id: string;
@@ -11,11 +13,66 @@ export default function DeepLinkPage({
   id,
   appStoreUrl = 'https://apps.apple.com/gb/app/omr-hub/id6755069825'
 }: DeepLinkPageProps) {
-  // Use Universal Link URL - this will trigger Universal Links automatically
-  // If app is installed, iOS will open it. If not, it stays on the page.
+  const [hasAttemptedRedirect, setHasAttemptedRedirect] = useState(false);
+  
+  // Universal Link URL - for Universal Links (iOS)
   const universalLinkUrl = `https://omrhub.acesapps.com/a/${type}/${id}`;
+  // Custom scheme URL - fallback for when Universal Links don't work
+  const customSchemeUrl = `omrhub://a/${type}/${id}`;
   const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
   const singularType = type.slice(0, -1); // Remove 's' from activities/events/workouts
+
+  // Detect if user is on iOS
+  const isIOS = typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+  
+  // Attempt to open app on page load
+  useEffect(() => {
+    if (hasAttemptedRedirect) return;
+    
+    // Small delay to ensure page is rendered
+    const timer = setTimeout(() => {
+      setHasAttemptedRedirect(true);
+      
+      if (isIOS) {
+        // On iOS, try Universal Link first (will work if app is installed and configured)
+        // Then fallback to custom scheme after a short delay
+        window.location.href = universalLinkUrl;
+        
+        // Fallback to custom scheme after 500ms if Universal Link didn't work
+        setTimeout(() => {
+          window.location.href = customSchemeUrl;
+        }, 500);
+      } else {
+        // On Android/other platforms, use custom scheme directly
+        window.location.href = customSchemeUrl;
+        
+        // Fallback to showing the page if app doesn't open
+        setTimeout(() => {
+          // If we're still here, the app didn't open - show the page
+        }, 1000);
+      }
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [hasAttemptedRedirect, isIOS, universalLinkUrl, customSchemeUrl]);
+
+  // Handle manual "Open in App" button click
+  const handleOpenInApp = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    
+    if (isIOS) {
+      // Try Universal Link first
+      window.location.href = universalLinkUrl;
+      
+      // Fallback to custom scheme
+      setTimeout(() => {
+        window.location.href = customSchemeUrl;
+      }, 300);
+    } else {
+      // Use custom scheme directly
+      window.location.href = customSchemeUrl;
+    }
+  };
 
   return (
     <main style={{
@@ -121,7 +178,8 @@ export default function DeepLinkPage({
           marginBottom: '32px',
         }}>
           <a
-            href={universalLinkUrl}
+            href={customSchemeUrl}
+            onClick={handleOpenInApp}
             style={{
               display: 'inline-block',
               padding: '16px',
