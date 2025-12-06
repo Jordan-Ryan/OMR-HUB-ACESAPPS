@@ -1,15 +1,18 @@
 import type { ReactNode } from 'react';
 import './globals.css';
+import AppLayout from '@/components/AppLayout';
 
 export const metadata = {
   title: 'OMR Hub',
-  description: 'Deep link and info site for the OMR Hub app.',
+  description: 'OMR Hub - Your hub for activities, events, and workouts.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AppLayout>{children}</AppLayout>
+      </body>
     </html>
   );
 }
