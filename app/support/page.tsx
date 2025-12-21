@@ -13,7 +13,7 @@ export default function SupportPage() {
   const faqs = [
     {
       q: 'How do I get started with OMR‑HUB?',
-      a: 'Download OMR‑HUB from the App Store and create an account. Currently, the app is available for one community. Once you're signed in, you can start creating workouts, scheduling events, tracking activities, and managing your training schedule.',
+      a: 'Download OMR‑HUB from the App Store and create an account. Currently, the app is available for one community. Once you\'re signed in, you can start creating workouts, scheduling events, tracking activities, and managing your training schedule.',
     },
     {
       q: 'What features are available in OMR‑HUB?',
@@ -33,14 +33,14 @@ export default function SupportPage() {
     },
     {
       q: 'How do workout assignments work?',
-      a: 'Coaches can assign specific workouts to their clients. When assigned, the workout appears in the client's app. This feature helps coaches personalize training programs for each client.',
+      a: 'Coaches can assign specific workouts to their clients. When assigned, the workout appears in the client\'s app. This feature helps coaches personalize training programs for each client.',
     },
     {
       q: 'Can I use OMR‑HUB without being in a community?',
-      a: 'Currently, OMR‑HUB is available for one community only. In the future, individual users will be able to use the app independently to create their own schedules and workouts without needing to join a coach's community. Stay tuned for updates!',
+      a: 'Currently, OMR‑HUB is available for one community only. In the future, individual users will be able to use the app independently to create their own schedules and workouts without needing to join a coach\'s community. Stay tuned for updates!',
     },
     {
-      q: 'I'm a coach — can I create my own community?',
+      q: 'I\'m a coach — can I create my own community?',
       a: 'Coach communities are coming soon! Coaches will be able to create separate communities for their clients with full access to manage workouts, events, schedules, programs, challenges, exercise libraries, and workout assignments. Email us to learn more and get notified when this feature launches.',
     },
     {
@@ -53,11 +53,11 @@ export default function SupportPage() {
     },
     {
       q: 'How do I sync my data across devices?',
-      a: 'Your data syncs automatically when you sign in with the same account. Make sure you're connected to the internet for changes to upload and download. All your workouts, events, activities, and schedules are stored in the cloud.',
+      a: 'Your data syncs automatically when you sign in with the same account. Make sure you\'re connected to the internet for changes to upload and download. All your workouts, events, activities, and schedules are stored in the cloud.',
     },
     {
       q: 'What should I do if the app crashes?',
-      a: 'Close and reopen the app, then check you're on the latest version and your device OS is up to date. If the issue persists, email support with any details you can share, including what you were doing when it crashed.',
+      a: 'Close and reopen the app, then check you\'re on the latest version and your device OS is up to date. If the issue persists, email support with any details you can share, including what you were doing when it crashed.',
     },
     {
       q: 'How do I delete my account?',
@@ -76,7 +76,7 @@ export default function SupportPage() {
         <header className="pageHeader">
           <h1>Support</h1>
           <p style={{ marginBottom: 24 }}>
-            Need a hand with OMR‑HUB? Email us and we'll get back to you as soon
+            Need a hand with OMR‑HUB? Email us and we\'ll get back to you as soon
             as we can.
           </p>
           <div className="heroActions">
@@ -122,7 +122,7 @@ export default function SupportPage() {
             <h2>Troubleshooting</h2>
             <div className="prose" style={{ marginTop: 12 }}>
               <section>
-                <h3>App won't load or feels slow</h3>
+                <h3>App won\'t load or feels slow</h3>
                 <ul>
                   <li>Check your internet connection - OMR‑HUB requires internet access to sync data</li>
                   <li>Close and restart the app</li>
@@ -132,12 +132,12 @@ export default function SupportPage() {
                 </ul>
               </section>
               <section>
-                <h3>Can't sign in</h3>
+                <h3>Can\'t sign in</h3>
                 <ul>
                   <li>Verify your email and password</li>
                   <li>Try resetting your password through the sign-in screen</li>
                   <li>Check your internet connection</li>
-                  <li>Ensure you're using the correct account credentials</li>
+                  <li>Ensure you\'re using the correct account credentials</li>
                   <li>Contact support if the issue persists</li>
                 </ul>
               </section>
@@ -146,8 +146,8 @@ export default function SupportPage() {
                 <ul>
                   <li>Check your internet connection - data syncs when online</li>
                   <li>Pull down to refresh the screen</li>
-                  <li>If you're a client, ensure your coach has assigned the workout to you</li>
-                  <li>If you're a coach, verify you've created and assigned the workout correctly</li>
+                  <li>If you\'re a client, ensure your coach has assigned the workout to you</li>
+                  <li>If you\'re a coach, verify you\'ve created and assigned the workout correctly</li>
                 </ul>
               </section>
               <section>
@@ -162,7 +162,7 @@ export default function SupportPage() {
               <section>
                 <h3>Schedule or attendance not updating</h3>
                 <ul>
-                  <li>Ensure you're connected to the internet</li>
+                  <li>Ensure you\'re connected to the internet</li>
                   <li>Pull down to refresh the schedule view</li>
                   <li>Verify you have the correct permissions (coaches can manage schedules, clients can view)</li>
                   <li>Try signing out and back in to refresh your session</li>

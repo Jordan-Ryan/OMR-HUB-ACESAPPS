@@ -3,8 +3,15 @@ export const metadata = {
   description: 'Discover all the features OMR-HUB has to offer for coaches and athletes',
 };
 
+type Feature = {
+  title: string;
+  description: string;
+  details: readonly string[];
+  badge?: string;
+};
+
 export default function FeaturesPage() {
-  const features = [
+  const features: Feature[] = [
     {
       title: 'Workouts',
       description:
@@ -116,7 +123,7 @@ export default function FeaturesPage() {
         'Track client engagement and progress',
       ],
     },
-  ] as const;
+  ];
 
   return (
     <div className="page">
