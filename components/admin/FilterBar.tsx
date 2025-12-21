@@ -195,3 +195,5 @@ export default function FilterBar({ filters, onClearFilters, style }: FilterBarP
 }
 
 
+
+

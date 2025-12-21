@@ -935,19 +935,27 @@ export default function ScheduleDetailPage() {
                         width: '100%',
                       }}
                     />
-                  ) : (
-                    <div style={{ fontSize: '17px', color: '#FFFFFF', fontWeight: '500' }}>
-                      {(activity.route_url || activity.route_link) ? (
-                        <a href={activity.route_url || activity.route_link} target="_blank" rel="noopener noreferrer" style={{ color: '#007AFF', textDecoration: 'none' }}>
-                          {activity.route_url || activity.route_link}
-                        </a>
-                      ) : (
-                        'No route link'
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+	                  ) : (
+	                    <div style={{ fontSize: '17px', color: '#FFFFFF', fontWeight: '500' }}>
+	                      {(() => {
+	                        const routeHref = (activity.route_url ?? activity.route_link) ?? undefined;
+	                        return routeHref ? (
+	                          <a
+	                            href={routeHref}
+	                            target="_blank"
+	                            rel="noopener noreferrer"
+	                            style={{ color: '#007AFF', textDecoration: 'none' }}
+	                          >
+	                            {routeHref}
+	                          </a>
+	                        ) : (
+	                          'No route link'
+	                        );
+	                      })()}
+	                    </div>
+	                  )}
+	                </div>
+	              )}
             </div>
           </div>
 
@@ -1320,4 +1328,3 @@ export default function ScheduleDetailPage() {
     </div>
   );
 }
-

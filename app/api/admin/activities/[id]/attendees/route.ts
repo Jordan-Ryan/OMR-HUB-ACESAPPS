@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { createClient } from '@/lib/supabase-server';
 
+export const dynamic = 'force-dynamic';
+
 // Add attendee to activity
 export async function POST(
   request: Request,
@@ -144,5 +146,6 @@ export async function DELETE(
     );
   }
 }
+
 
 

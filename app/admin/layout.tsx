@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { getCurrentUser } from '@/lib/auth';
 import AdminLayoutWrapper from '@/components/admin/AdminLayoutWrapper';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   // Don't require admin here - let middleware handle protection
   // Just check if user is admin to conditionally show navigation
@@ -33,4 +35,3 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     </div>
   );
 }
-

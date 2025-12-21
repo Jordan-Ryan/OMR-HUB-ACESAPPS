@@ -18,14 +18,14 @@ interface Event {
   image_url?: string | null;
   must_attend_all?: boolean | null;
   attendance_count?: number;
-  attendance?: Array<{
-    user_id: string;
-    status: string;
-    selected_days?: string[] | null;
-    start_times?: Record<string, string | null> | null;
-    profiles?: {
-      id: string;
-      first_name?: string | null;
+	  attendance?: Array<{
+	    user_id: string;
+	    status: string;
+	    selected_days?: string[] | string | null;
+	    start_times?: Record<string, string | null> | null;
+	    profiles?: {
+	      id: string;
+	      first_name?: string | null;
       last_name?: string | null;
       nickname?: string | null;
       avatar_url?: string | null;
@@ -183,11 +183,11 @@ export default function EventDetailPage() {
             if (data.url) {
               setEventImageUrl(data.url);
             } else {
-              setEventImageUrl(event.image_url);
+              setEventImageUrl(event.image_url ?? null);
             }
           })
           .catch(() => {
-            setEventImageUrl(event.image_url);
+            setEventImageUrl(event.image_url ?? null);
           });
       }
     } else {

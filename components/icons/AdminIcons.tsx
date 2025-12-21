@@ -2,7 +2,7 @@ import { SVGProps } from 'react';
 
 type IconProps = SVGProps<SVGSVGElement>;
 
-const baseIconProps = (props: IconProps) => ({
+const baseIconProps = (props: IconProps): IconProps => ({
   width: 18,
   height: 18,
   viewBox: '0 0 24 24',

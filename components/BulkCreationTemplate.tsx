@@ -121,23 +121,23 @@ export default function BulkCreationTemplate() {
   }, []);
 
   // Update template with default hosts when user IDs become available
-  useEffect(() => {
-    if ((omarId || samId) && templateLoaded && template.length > 0) {
-      setTemplate(prevTemplate => 
-        prevTemplate.map(item => {
-          // Only set default host if no host is already set
-          if (!item.host_user_id) {
-            const defaultHost = item.activity_type === 'Pilates' && samId ? samId : omarId;
-            return {
-              ...item,
-              host_user_id: defaultHost
-            };
-          }
-          return item;
-        })
-      );
-    }
-  }, [omarId, samId, templateLoaded]);
+	  useEffect(() => {
+	    if ((omarId || samId) && templateLoaded && template.length > 0) {
+	      setTemplate(prevTemplate => 
+	        prevTemplate.map(item => {
+	          // Only set default host if no host is already set
+	          if (!item.host_user_id) {
+	            const defaultHost = item.activity_type === 'Pilates' && samId ? samId : omarId;
+	            return {
+	              ...item,
+	              host_user_id: defaultHost ?? undefined
+	            };
+	          }
+	          return item;
+	        })
+	      );
+	    }
+	  }, [omarId, samId, templateLoaded]);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -907,4 +907,3 @@ export default function BulkCreationTemplate() {
     </div>
   );
 }
-

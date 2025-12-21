@@ -3,6 +3,7 @@
 import Link from 'next/link';
 
 export default function Footer() {
+  const year = new Date().getFullYear();
   const footerLinks = [
     { href: '/privacy', label: 'Privacy Policy' },
     { href: '/terms', label: 'Terms & Conditions' },
@@ -75,7 +76,7 @@ export default function Footer() {
               margin: 0,
             }}
           >
-            © 2025 OMR Hub. All rights reserved.
+            © {year} OMR‑HUB. All rights reserved.
           </p>
 
         </div>
@@ -83,4 +84,3 @@ export default function Footer() {
     </footer>
   );
 }
-

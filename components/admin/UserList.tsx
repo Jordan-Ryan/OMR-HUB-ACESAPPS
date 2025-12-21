@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import SearchInput from './SearchInput';
 import { FilterConfig } from './FilterBar';
+import type { Column } from './DataTable';
 import StatusBadge from './StatusBadge';
 
 interface User {
