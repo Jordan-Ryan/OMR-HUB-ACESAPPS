@@ -5,7 +5,7 @@ import Link from 'next/link';
 import ActivityList from './ActivityList';
 import EventList from './EventList';
 import WorkoutList from './WorkoutList';
-import ChallengeList from './ChallengeList';
+import UserChallengeList from './UserChallengeList';
 
 interface UserDetailProps {
   userId: string;
@@ -270,7 +270,7 @@ export default function UserDetail({ userId }: UserDetailProps) {
             userId={userId}
           />
         )}
-        {activeTab === 'challenges' && <ChallengeList challenges={challenges} />}
+        {activeTab === 'challenges' && <UserChallengeList challenges={challenges} />}
       </div>
     </div>
   );

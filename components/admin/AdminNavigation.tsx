@@ -17,6 +17,7 @@ export default function AdminNavigation() {
 
   const navLinks = [
     { href: '/admin/users', label: 'Users' },
+    { href: '/admin/challenges', label: 'Challenges' },
     { href: '/admin/coach/schedule', label: 'PT Schedule' },
     { href: '/admin/coach/workouts', label: 'Workouts' },
     { href: '/admin/coach/exercises', label: 'Exercises' },

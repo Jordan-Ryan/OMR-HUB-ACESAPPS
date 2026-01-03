@@ -2,7 +2,7 @@ interface ChallengeListProps {
   challenges: any[];
 }
 
-export default function ChallengeList({ challenges }: ChallengeListProps) {
+export default function UserChallengeList({ challenges }: ChallengeListProps) {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -62,3 +62,4 @@ export default function ChallengeList({ challenges }: ChallengeListProps) {
     </div>
   );
 }
+

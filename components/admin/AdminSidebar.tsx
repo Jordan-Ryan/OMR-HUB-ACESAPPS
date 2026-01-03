@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, ReactNode } from 'react';
 import { createClient } from '@/lib/supabase';
-import { CalendarIcon, ClipboardIcon, DumbbellIcon, UsersIcon, BellIcon, CreditsIcon } from '@/components/icons/AdminIcons';
+import { CalendarIcon, ClipboardIcon, DumbbellIcon, UsersIcon, BellIcon, CreditsIcon, TrophyIcon } from '@/components/icons/AdminIcons';
 
 // Module-level cache to persist counts across navigation
 let cachedCounts: Record<string, number> | null = null;
@@ -103,13 +103,14 @@ export default function AdminSidebar({ isCollapsed: initialCollapsed = false }: 
   const fetchCounts = async () => {
     try {
       // Fetch counts for each section
-      const [usersRes, workoutsRes, exercisesRes, scheduleRes, activitiesRes, eventsRes] = await Promise.all([
+      const [usersRes, workoutsRes, exercisesRes, scheduleRes, activitiesRes, eventsRes, challengesRes] = await Promise.all([
         fetch('/api/admin/users').catch(() => null),
         fetch('/api/admin/workouts').catch(() => null),
         fetch('/api/admin/exercises').catch(() => null),
         fetch('/api/admin/coach/pt-schedule').catch(() => null),
         fetch('/api/admin/activities').catch(() => null),
         fetch('/api/admin/events').catch(() => null),
+        fetch('/api/admin/challenges').catch(() => null),
       ]);
 
       const countsData: Record<string, number> = {};
@@ -161,6 +162,18 @@ export default function AdminSidebar({ isCollapsed: initialCollapsed = false }: 
         countsData.events = upcomingEvents.length;
       }
 
+      // Count active challenges
+      if (challengesRes?.ok) {
+        const challengesData = await challengesRes.json();
+        const now = new Date();
+        const activeChallenges = (challengesData.challenges || []).filter((challenge: any) => {
+          const startDate = new Date(challenge.start_at);
+          const endDate = new Date(challenge.end_at);
+          return startDate <= now && endDate >= now;
+        });
+        countsData.challenges = activeChallenges.length;
+      }
+
       setCounts(countsData);
       // Cache the counts in both module-level cache and localStorage
       cachedCounts = countsData;
@@ -180,6 +193,7 @@ export default function AdminSidebar({ isCollapsed: initialCollapsed = false }: 
 
   const navItems: NavItem[] = [
     { href: '/admin/users', label: 'Users', icon: <UsersIcon />, count: counts.users },
+    { href: '/admin/challenges', label: 'Challenges', icon: <TrophyIcon />, count: counts.challenges },
     { href: '/admin/schedule', label: 'Schedule', icon: <CalendarIcon />, count: counts.scheduleUpcoming },
     { href: '/admin/events', label: 'Events', icon: <BellIcon />, count: counts.events },
     { href: '/admin/credits', label: 'Credits', icon: <CreditsIcon /> },
@@ -201,6 +215,9 @@ export default function AdminSidebar({ isCollapsed: initialCollapsed = false }: 
   const isActive = (href: string) => {
     if (href === '/admin/users') {
       return pathname === '/admin/users' || pathname?.startsWith('/admin/users/');
+    }
+    if (href === '/admin/challenges') {
+      return pathname === '/admin/challenges' || pathname?.startsWith('/admin/challenges/');
     }
     if (href === '/admin/schedule') {
       return pathname === '/admin/schedule' || pathname?.startsWith('/admin/schedule/');

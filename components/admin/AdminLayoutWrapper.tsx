@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import SecondarySidebar from './SecondarySidebar';
+import ChallengesSidebar from './ChallengesSidebar';
 import {
   CalendarIcon,
   CheckIcon,
@@ -83,7 +84,8 @@ export default function AdminLayoutWrapper({ children }: { children: React.React
     pathname?.startsWith('/admin/schedule') ||
     pathname?.startsWith('/admin/events') ||
     pathname?.startsWith('/admin/users') ||
-    pathname?.startsWith('/admin/credits');
+    pathname?.startsWith('/admin/credits') ||
+    pathname?.startsWith('/admin/challenges');
 
   // Get secondary sidebar config based on current route
   const getSecondarySidebarConfig = () => {
@@ -207,15 +209,17 @@ export default function AdminLayoutWrapper({ children }: { children: React.React
     };
   }, []);
   
-  const contentMarginLeft = shouldShowSecondarySidebar 
+  const showChallengesSidebar = pathname?.startsWith('/admin/challenges');
+  const contentMarginLeft = (shouldShowSecondarySidebar || showChallengesSidebar)
     ? `calc(${mainSidebarWidth} + ${secondarySidebarWidth})` 
     : mainSidebarWidth;
 
-  // For other admin pages, show sidebar and header
   return (
     <>
       <AdminSidebar />
-      {secondarySidebarConfig && (
+      {showChallengesSidebar ? (
+        <ChallengesSidebar mainSidebarWidth={mainSidebarWidth} />
+      ) : secondarySidebarConfig ? (
         <SecondarySidebar
           title={secondarySidebarConfig.title}
           items={secondarySidebarConfig.items}
@@ -223,7 +227,7 @@ export default function AdminLayoutWrapper({ children }: { children: React.React
           filterKey={secondarySidebarConfig.filterKey}
           mainSidebarWidth={mainSidebarWidth}
         />
-      )}
+      ) : null}
       <div
         style={{
           marginLeft: contentMarginLeft,
@@ -236,7 +240,7 @@ export default function AdminLayoutWrapper({ children }: { children: React.React
         <AdminHeader 
           mainSidebarWidth={mainSidebarWidth}
           secondarySidebarWidth={secondarySidebarWidth}
-          hideTitle={!!secondarySidebarConfig}
+          hideTitle={!!secondarySidebarConfig || showChallengesSidebar}
         />
         <main
           style={{

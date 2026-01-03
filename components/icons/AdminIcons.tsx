@@ -204,3 +204,15 @@ export function CreditsIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function TrophyIcon(props: IconProps) {
+  return (
+    <svg {...baseIconProps(props)}>
+      <path d="M7.5 5.5h9v3.5c0 2.5-2 4.5-4.5 4.5S7.5 11.5 7.5 9V5.5Z" />
+      <path d="M9 15.5h6v2.5H9z" />
+      <path d="M10.5 18h3v1.5h-3z" />
+      <path d="M8.5 19.5h7" />
+      <path d="M10.5 5.5V4a1.5 1.5 0 0 1 1.5-1.5h0a1.5 1.5 0 0 1 1.5 1.5v1.5" />
+    </svg>
+  );
+}
