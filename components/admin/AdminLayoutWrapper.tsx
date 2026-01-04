@@ -1,7 +1,8 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { createClient } from '@/lib/supabase';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import SecondarySidebar from './SecondarySidebar';
@@ -20,14 +21,64 @@ import {
 
 export default function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isLoginPage = pathname === '/admin/login' || pathname?.includes('/admin/login');
+  
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const [muscleGroups, setMuscleGroups] = useState<Array<{ name: string; count: number }>>([]);
   const [userCounts, setUserCounts] = useState<{ members: number; guests: number }>({ members: 0, guests: 0 });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [mainSidebarWidth, setMainSidebarWidth] = useState('280px');
+  const [secondarySidebarWidth, setSecondarySidebarWidth] = useState('200px');
   
-  // For login page, don't show navigation at all
-  if (isLoginPage) {
-    return <>{children}</>;
-  }
+  // Check authentication on client side
+  useEffect(() => {
+    // Don't check auth on login page - it has its own layout
+    if (isLoginPage) {
+      setIsAuthenticated(true);
+      return;
+    }
+
+    const checkAuth = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          // Only redirect if we're not already on the login page
+          if (!isLoginPage) {
+            router.push('/admin/login');
+          }
+          return;
+        }
+
+        // Check if user is admin
+        const { data: roleData, error: roleError } = await supabase
+          .from('roles')
+          .select('is_admin')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (roleError || !roleData || !roleData.is_admin) {
+          // Only redirect if we're not already on the login page
+          if (!isLoginPage) {
+            router.push('/admin/login');
+          }
+          return;
+        }
+
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error('Error checking auth:', error);
+        // Only redirect if we're not already on the login page
+        if (!isLoginPage) {
+          router.push('/admin/login');
+        }
+      }
+    };
+
+    checkAuth();
+  }, [pathname, router, isLoginPage]);
 
   // Fetch muscle groups for exercises page
   useEffect(() => {
@@ -75,6 +126,54 @@ export default function AdminLayoutWrapper({ children }: { children: React.React
         });
     }
   }, [pathname]);
+
+  // Update sidebar widths from localStorage
+  useEffect(() => {
+    const updateWidths = () => {
+      const mainCollapsed = localStorage.getItem('admin-sidebar-collapsed') === 'true';
+      const secondaryCollapsed = localStorage.getItem('secondary-sidebar-collapsed') === 'true';
+      
+      setMainSidebarWidth(mainCollapsed ? '80px' : '280px');
+      setSecondarySidebarWidth(secondaryCollapsed ? '40px' : '200px');
+    };
+    
+    updateWidths();
+    // Listen for custom event when sidebars toggle
+    window.addEventListener('sidebar-toggle', updateWidths);
+    
+    return () => {
+      window.removeEventListener('sidebar-toggle', updateWidths);
+    };
+  }, []);
+
+  // NOW WE CAN DO CONDITIONAL RETURNS - all hooks have been called
+  // For login page, don't show navigation at all
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
+
+  // Show loading state while checking authentication
+  if (isAuthenticated === null) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#0a0a0a',
+          color: '#FFFFFF',
+        }}
+      >
+        <p style={{ color: 'rgba(235, 235, 245, 0.6)' }}>Checking authentication...</p>
+      </div>
+    );
+  }
+
+  // Don't render admin UI if not authenticated (redirect should happen, but just in case)
+  if (!isAuthenticated) {
+    return null;
+  }
 
   // Check if current route should show secondary sidebar
   const shouldShowSecondarySidebar = 
@@ -186,29 +285,6 @@ export default function AdminLayoutWrapper({ children }: { children: React.React
   };
 
   const secondarySidebarConfig = getSecondarySidebarConfig();
-  
-  // Get sidebar states from localStorage (will be managed by sidebar components)
-  const [mainSidebarWidth, setMainSidebarWidth] = useState('280px');
-  const [secondarySidebarWidth, setSecondarySidebarWidth] = useState('200px');
-  
-  useEffect(() => {
-    const updateWidths = () => {
-      const mainCollapsed = localStorage.getItem('admin-sidebar-collapsed') === 'true';
-      const secondaryCollapsed = localStorage.getItem('secondary-sidebar-collapsed') === 'true';
-      
-      setMainSidebarWidth(mainCollapsed ? '80px' : '280px');
-      setSecondarySidebarWidth(secondaryCollapsed ? '40px' : '200px');
-    };
-    
-    updateWidths();
-    // Listen for custom event when sidebars toggle
-    window.addEventListener('sidebar-toggle', updateWidths);
-    
-    return () => {
-      window.removeEventListener('sidebar-toggle', updateWidths);
-    };
-  }, []);
-  
   const showChallengesSidebar = pathname?.startsWith('/admin/challenges');
   const contentMarginLeft = (shouldShowSecondarySidebar || showChallengesSidebar)
     ? `calc(${mainSidebarWidth} + ${secondarySidebarWidth})` 

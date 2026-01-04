@@ -1,14 +1,13 @@
 import type { ReactNode } from 'react';
-import { getCurrentUser } from '@/lib/auth';
 import AdminLayoutWrapper from '@/components/admin/AdminLayoutWrapper';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  // Don't require admin here - let middleware handle protection
-  // Just check if user is admin to conditionally show navigation
-  const user = await getCurrentUser();
-  const showNavigation = user && user.is_admin;
+  // Don't check auth here - let middleware handle it
+  // The middleware will redirect unauthenticated users to /admin/login
+  // The AdminLayoutWrapper will also do a client-side check
+  // This prevents redirect loops since the login page uses this layout too
 
   return (
     <div
@@ -22,15 +21,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       }}
     >
       <AdminLayoutWrapper>
-        {showNavigation ? (
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            {children}
-          </div>
-        ) : (
-          <main style={{ width: '100%', position: 'relative', zIndex: 1 }}>
-            {children}
-          </main>
-        )}
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {children}
+        </div>
       </AdminLayoutWrapper>
     </div>
   );

@@ -1,8 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { BellIcon, SearchIcon, SettingsIcon } from '@/components/icons/AdminIcons';
 
 interface AdminHeaderProps {
   title?: string;
@@ -20,8 +18,6 @@ export default function AdminHeader({
   hideTitle = false,
 }: AdminHeaderProps) {
   const pathname = usePathname();
-  const [searchValue, setSearchValue] = useState('');
-  const [notifications, setNotifications] = useState(0); // TODO: Fetch actual notifications
 
   // Generate page title from pathname if not provided
   const getPageTitle = () => {
@@ -93,53 +89,6 @@ export default function AdminHeader({
         )}
         {hideTitle && <div style={{ flex: 1, minWidth: 0 }} />}
 
-        {/* Search Bar */}
-        <div
-          style={{
-            flex: 1,
-            maxWidth: '400px',
-            position: 'relative',
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Search..."
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 16px 10px 40px',
-              background: '#1a1a1a',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '10px',
-              color: '#FFFFFF',
-              fontSize: '15px',
-              outline: 'none',
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(0, 122, 255, 0.5)';
-              e.currentTarget.style.background = '#1f1f1f';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-              e.currentTarget.style.background = '#1a1a1a';
-            }}
-          />
-          <span
-            style={{
-              position: 'absolute',
-              left: '12px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'rgba(255, 255, 255, 0.5)',
-              pointerEvents: 'none',
-            }}
-          >
-            <SearchIcon width={18} height={18} />
-          </span>
-        </div>
-
         {/* Right Side Actions */}
         <div
           style={{
@@ -148,87 +97,8 @@ export default function AdminHeader({
             gap: '12px',
           }}
         >
-          {/* Notifications */}
-          <button
-            style={{
-              position: 'relative',
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              color: 'rgba(255, 255, 255, 0.9)',
-              fontSize: '20px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-            }}
-          >
-            <BellIcon width={18} height={18} />
-            {notifications > 0 && (
-              <span
-                style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  right: '-4px',
-                  width: '18px',
-                  height: '18px',
-                  borderRadius: '50%',
-                  background: '#FF3B30',
-                  color: '#FFFFFF',
-                  fontSize: '11px',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '2px solid #141414',
-                }}
-              >
-                {notifications > 9 ? '9+' : notifications}
-              </span>
-            )}
-          </button>
-
           {/* Action Button (if provided) */}
           {actionButton}
-
-          {/* Settings/More Menu */}
-          <button
-            style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '10px',
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              color: 'rgba(255, 255, 255, 0.9)',
-              fontSize: '20px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-            }}
-          >
-            <SettingsIcon width={18} height={18} />
-          </button>
         </div>
       </div>
 
@@ -240,9 +110,6 @@ export default function AdminHeader({
           }
           .admin-header h1 {
             font-size: 18px !important;
-          }
-          .admin-header input {
-            display: none !important;
           }
         }
         @media (max-width: 480px) {

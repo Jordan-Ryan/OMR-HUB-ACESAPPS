@@ -38,15 +38,27 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh the auth session
-  await supabase.auth.getUser();
-
   // Protect admin routes (except login page and API routes)
   const pathname = request.nextUrl.pathname;
   const isLoginPage = pathname === '/admin/login';
   const isApiRoute = pathname.startsWith('/api/');
   
   if (pathname.startsWith('/admin') && !isLoginPage && !isApiRoute) {
+    // Get the session first to ensure it's refreshed
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    // If no session, redirect to login
+    if (!session) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/admin/login';
+      // Preserve the original URL as a query parameter so we can redirect back after login
+      url.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(url);
+    }
+
+    // Get user from session
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -54,6 +66,7 @@ export async function middleware(request: NextRequest) {
     if (!user) {
       const url = request.nextUrl.clone();
       url.pathname = '/admin/login';
+      url.searchParams.set('redirect', pathname);
       return NextResponse.redirect(url);
     }
 
@@ -67,6 +80,7 @@ export async function middleware(request: NextRequest) {
     if (roleError || !roleData || !roleData.is_admin) {
       const url = request.nextUrl.clone();
       url.pathname = '/admin/login';
+      url.searchParams.set('redirect', pathname);
       return NextResponse.redirect(url);
     }
   }

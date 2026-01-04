@@ -7,7 +7,7 @@ import TimedChallengeForm from '@/components/admin/CommunityChallengeForm';
 export default function EditTimedChallengePage() {
   const params = useParams();
   const challengeId = params.id as string;
-  const timedChallengeId = params.communityId as string;
+  const timedChallengeId = params.timedChallengeId as string;
   const [initialData, setInitialData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,4 +57,5 @@ export default function EditTimedChallengePage() {
     />
   );
 }
+
 

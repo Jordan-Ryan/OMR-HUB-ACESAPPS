@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import SearchInput from './SearchInput';
+import { WalkIcon, NutritionIcon, BarbellIcon, FitnessIcon, BoatIcon, SnowIcon, BicycleIcon } from '@/components/icons/AdminIcons';
 
 interface Enrollment {
   id: string;
@@ -11,6 +12,12 @@ interface Enrollment {
   fitness_level: 'beginner' | 'intermediate' | 'advanced';
   enrolled_at: string;
   start_date?: string | null;
+  calculated_calories?: number | null;
+  protein_percent?: number | null;
+  carbs_percent?: number | null;
+  fat_percent?: number | null;
+  bodyweight_kg?: number | null;
+  min_steps?: number | null;
   user?: {
     id: string;
     first_name?: string | null;
@@ -20,10 +27,30 @@ interface Enrollment {
   };
 }
 
+interface WorkoutDetail {
+  activityType?: 'weights' | 'cardio' | 'other';
+  name?: string;
+}
+
+interface DailyCheckin {
+  id: string;
+  enrollment_id: string;
+  date: string;
+  workout_completed: boolean;
+  workout_type: string | null;
+  steps: number | null;
+  calories_consumed: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+  workout_details?: WorkoutDetail[] | null;
+}
+
 interface ParticipantListProps {
   challengeId: string;
   challengeStartDate: string;
   challengeEndDate: string;
+  statusFilter?: 'all' | 'pending' | 'onboarded';
 }
 
 export default function ParticipantList({ 
@@ -36,10 +63,20 @@ export default function ParticipantList({
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [checkinsData, setCheckinsData] = useState<Record<string, Record<string, DailyCheckin>>>({});
+  const [redDaysData, setRedDaysData] = useState<Record<string, Array<{ start_date: string; end_date: string }>>>({});
+  const [latestWeights, setLatestWeights] = useState<Record<string, { weight_kg: number | null; check_in_number: number | null }>>({});
+  const [loadingCheckins, setLoadingCheckins] = useState(false);
 
   useEffect(() => {
     fetchEnrollments();
   }, [challengeId]);
+
+  useEffect(() => {
+    if (enrollments.length > 0) {
+      fetchCheckinsData();
+    }
+  }, [enrollments, challengeId]);
 
   const fetchEnrollments = async () => {
     try {
@@ -56,6 +93,26 @@ export default function ParticipantList({
       console.error('Error fetching enrollments:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCheckinsData = async () => {
+    try {
+      setLoadingCheckins(true);
+      const response = await fetch(`/api/admin/challenges/${challengeId}/participants/checkins`);
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch check-ins');
+      }
+
+      const data = await response.json();
+      setCheckinsData(data.checkins || {});
+      setRedDaysData(data.redDays || {});
+      setLatestWeights(data.latestWeights || {});
+    } catch (error) {
+      console.error('Error fetching check-ins:', error);
+    } finally {
+      setLoadingCheckins(false);
     }
   };
 
@@ -194,6 +251,90 @@ export default function ParticipantList({
   };
 
   const { days, weeks } = calculateDaysAndWeeks();
+
+  // Helper functions for check-in status
+  const getCheckinForDate = (enrollmentId: string, date: string): DailyCheckin | undefined => {
+    const enrollmentCheckins = checkinsData[enrollmentId];
+    if (!enrollmentCheckins) return undefined;
+    return enrollmentCheckins[date];
+  };
+
+  const isRedDay = (enrollmentId: string, date: string): boolean => {
+    const redDays = redDaysData[enrollmentId];
+    if (!redDays) return false;
+    return redDays.some(rd => {
+      const start = new Date(rd.start_date);
+      const end = new Date(rd.end_date);
+      const checkDate = new Date(date);
+      return checkDate >= start && checkDate <= end;
+    });
+  };
+
+  const getStepsStatus = (checkin: DailyCheckin | undefined, stepGoal: number | null): 'green' | 'red' | 'none' => {
+    if (!checkin || checkin.steps === null || stepGoal === null) return 'none';
+    return checkin.steps >= stepGoal ? 'green' : 'red';
+  };
+
+  const getMacrosStatus = (checkin: DailyCheckin | undefined, enrollment: Enrollment, date: string): 'green' | 'amber' | 'red' | 'none' => {
+    if (!checkin || checkin.protein_g === null || checkin.carbs_g === null || checkin.fat_g === null) return 'none';
+    if (!enrollment.calculated_calories || enrollment.calculated_calories <= 0) return 'none';
+    if (checkin.calories_consumed === null) return 'none';
+
+    const targetCalories = enrollment.calculated_calories;
+    const targetProtein = (targetCalories * (enrollment.protein_percent || 0) / 100) / 4; // 4 cal per gram
+    const targetCarbs = (targetCalories * (enrollment.carbs_percent || 0) / 100) / 4; // 4 cal per gram
+    const targetFat = (targetCalories * (enrollment.fat_percent || 0) / 100) / 9; // 9 cal per gram
+
+    const leeway = 0.1; // 10% leeway
+
+    const proteinInRange = checkin.protein_g >= targetProtein * (1 - leeway) && checkin.protein_g <= targetProtein * (1 + leeway);
+    const carbsInRange = checkin.carbs_g >= targetCarbs * (1 - leeway) && checkin.carbs_g <= targetCarbs * (1 + leeway);
+    const fatInRange = checkin.fat_g >= targetFat * (1 - leeway) && checkin.fat_g <= targetFat * (1 + leeway);
+    const allMacrosInRange = proteinInRange && carbsInRange && fatInRange;
+
+    const caloriesInRange = checkin.calories_consumed >= targetCalories * (1 - leeway) && 
+                            checkin.calories_consumed <= targetCalories * (1 + leeway);
+
+    if (allMacrosInRange && caloriesInRange) return 'green';
+    if (caloriesInRange && !allMacrosInRange) return 'amber';
+    return 'red';
+  };
+
+  const getWorkoutIcons = (checkin: DailyCheckin | undefined): { weights: boolean; cardio: boolean } => {
+    if (!checkin || !checkin.workout_completed) return { weights: false, cardio: false };
+    
+    // First check workout_details for activityType
+    if (checkin.workout_details && Array.isArray(checkin.workout_details) && checkin.workout_details.length > 0) {
+      const hasWeights = checkin.workout_details.some((detail: WorkoutDetail) => detail.activityType === 'weights');
+      const hasCardio = checkin.workout_details.some((detail: WorkoutDetail) => detail.activityType === 'cardio');
+      return { weights: hasWeights, cardio: hasCardio };
+    }
+    
+    // Fall back to workout_type string matching
+    if (checkin.workout_type) {
+      const type = checkin.workout_type.toLowerCase();
+      const hasWeights = type.includes('weight') || type.includes('strength') || type.includes('circuit');
+      const hasCardio = type.includes('cardio') || type.includes('run') || type.includes('bike');
+      return { weights: hasWeights, cardio: hasCardio };
+    }
+    
+    return { weights: false, cardio: false };
+  };
+
+  const formatDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getMostRecentWeight = (enrollment: Enrollment): number | null => {
+    const latestWeight = latestWeights[enrollment.id];
+    if (latestWeight && latestWeight.weight_kg !== null) {
+      return latestWeight.weight_kg;
+    }
+    return enrollment.bodyweight_kg || null;
+  };
 
   const filteredEnrollments = enrollments.filter((enrollment) => {
     const searchLower = searchTerm.toLowerCase();
@@ -695,7 +836,7 @@ export default function ParticipantList({
                           >
                             {getUserName(enrollment.user)}
                           </div>
-                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
                             <span
                               style={{
                                 padding: '2px 8px',
@@ -711,27 +852,140 @@ export default function ParticipantList({
                               {enrollment.fitness_level}
                             </span>
                           </div>
+                          {enrollment.status === 'onboarded' && (
+                            <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.6)', lineHeight: '1.4' }}>
+                              {getMostRecentWeight(enrollment) !== null && (
+                                <div>Weight: {getMostRecentWeight(enrollment)?.toFixed(1)}kg</div>
+                              )}
+                              {enrollment.calculated_calories && (
+                                <div>Calories: {enrollment.calculated_calories}</div>
+                              )}
+                              {(enrollment.protein_percent || enrollment.carbs_percent || enrollment.fat_percent) && (
+                                <div>
+                                  Macros: {enrollment.protein_percent?.toFixed(0) || 0}% / {enrollment.carbs_percent?.toFixed(0) || 0}% / {enrollment.fat_percent?.toFixed(0) || 0}%
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
-                    {/* Week Columns */}
-                    {days.map((day) => (
-                      <td
-                        key={day.dayNumber}
-                        style={{
-                          padding: '12px 8px',
-                          textAlign: 'center',
-                          borderLeft: '1px solid rgba(255, 255, 255, 0.04)',
-                          color: 'rgba(255, 255, 255, 0.6)',
-                          fontSize: '12px',
-                          minWidth: '60px',
-                          width: '60px',
-                        }}
-                      >
-                        {/* Placeholder for day data - can be customized later */}
-                        -
-                      </td>
-                    ))}
+                    {/* Date Cells */}
+                    {days.map((day) => {
+                      const dateStr = formatDateString(day.date);
+                      const checkin = getCheckinForDate(enrollment.id, dateStr);
+                      const isRed = isRedDay(enrollment.id, dateStr);
+                      const hasCheckin = !!checkin;
+                      
+                      // Only show icons if date is on or after enrollment start date
+                      const enrollmentStartDate = enrollment.start_date ? new Date(enrollment.start_date) : null;
+                      const dayDate = new Date(dateStr);
+                      dayDate.setHours(0, 0, 0, 0);
+                      const shouldShowIcons = !enrollmentStartDate || dayDate >= enrollmentStartDate;
+                      
+                      const stepsStatus = shouldShowIcons ? getStepsStatus(checkin, enrollment.min_steps || null) : 'none';
+                      const macrosStatus = shouldShowIcons ? getMacrosStatus(checkin, enrollment, dateStr) : 'none';
+                      const workoutIcons = shouldShowIcons ? getWorkoutIcons(checkin) : { weights: false, cardio: false };
+
+                      // Determine cell background color - only red for red days
+                      let cellBgColor = 'transparent';
+                      if (isRed) {
+                        cellBgColor = 'rgba(255, 59, 48, 0.2)';
+                      }
+
+                      return (
+                        <td
+                          key={day.dayNumber}
+                          onClick={() => {
+                            if (hasCheckin) {
+                              router.push(`/admin/challenges/${challengeId}/participants/${enrollment.user_id}?date=${dateStr}`);
+                            }
+                          }}
+                          style={{
+                            padding: '8px 4px',
+                            textAlign: 'center',
+                            borderLeft: '1px solid rgba(255, 255, 255, 0.04)',
+                            backgroundColor: cellBgColor,
+                            minWidth: '60px',
+                            width: '60px',
+                            cursor: hasCheckin ? 'pointer' : 'default',
+                            position: 'relative',
+                            transition: 'background-color 0.2s',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (hasCheckin) {
+                              e.currentTarget.style.backgroundColor = isRed 
+                                ? 'rgba(255, 59, 48, 0.3)' 
+                                : 'rgba(255, 255, 255, 0.05)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = cellBgColor;
+                          }}
+                        >
+                          <div style={{ 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            alignItems: 'center', 
+                            gap: '4px',
+                            minHeight: '50px',
+                            justifyContent: 'center',
+                          }}>
+                            {shouldShowIcons ? (
+                              <>
+                                {/* Steps Icon - always show (grey if no data) */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <WalkIcon 
+                                    width={16} 
+                                    height={16} 
+                                    style={{ 
+                                      color: stepsStatus === 'green' 
+                                        ? '#34C759' 
+                                        : stepsStatus === 'red' 
+                                        ? '#FF3B30' 
+                                        : 'rgba(255, 255, 255, 0.3)' 
+                                    }} 
+                                  />
+                                </div>
+                                
+                                {/* Macros Icon - always show (grey if no data) */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <NutritionIcon 
+                                    width={16} 
+                                    height={16} 
+                                    style={{ 
+                                      color: macrosStatus === 'green' 
+                                        ? '#34C759' 
+                                        : macrosStatus === 'amber' 
+                                        ? '#FF9500' 
+                                        : macrosStatus === 'red' 
+                                        ? '#FF3B30' 
+                                        : 'rgba(255, 255, 255, 0.3)' 
+                                    }} 
+                                  />
+                                </div>
+                                
+                                {/* Weights Icon - only show if weights workout was done */}
+                                {workoutIcons.weights && (
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <BarbellIcon width={16} height={16} style={{ color: '#34C759' }} />
+                                  </div>
+                                )}
+                                
+                                {/* Cardio Icon - only show if cardio workout was done */}
+                                {workoutIcons.cardio && (
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <FitnessIcon width={16} height={16} style={{ color: '#34C759' }} />
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div style={{ color: 'rgba(255, 255, 255, 0.2)', fontSize: '10px' }}>-</div>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
