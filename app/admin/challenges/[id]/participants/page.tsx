@@ -8,6 +8,8 @@ interface Challenge {
   id: string;
   start_at: string;
   end_at: string;
+  physique_frequency?: string | null;
+  weight_measurement_frequency?: string | null;
 }
 
 export default function ChallengeParticipantsPage() {
@@ -78,6 +80,8 @@ export default function ChallengeParticipantsPage() {
         challengeId={challengeId}
         challengeStartDate={challenge.start_at}
         challengeEndDate={challenge.end_at}
+        physiqueFrequency={challenge.physique_frequency || 'weekly'}
+        weightMeasurementFrequency={challenge.weight_measurement_frequency || 'weekly'}
       />
     </div>
   );

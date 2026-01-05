@@ -264,6 +264,27 @@ export default function ActivityDetail({ activityId }: ActivityDetailProps) {
 
   return (
     <div>
+      {/* Back button */}
+      <Link
+        href="/admin/coach/schedule"
+        style={{
+          color: '#007AFF',
+          textDecoration: 'none',
+          marginBottom: '24px',
+          display: 'inline-block',
+          fontSize: '17px',
+          fontWeight: '500',
+          transition: 'color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = '#0051D5';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = '#007AFF';
+        }}
+      >
+        ← Back to PT Schedule
+      </Link>
       {/* Header with Edit and Delete buttons */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <h1 style={{ margin: 0 }}>Activity Details</h1>

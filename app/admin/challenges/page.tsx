@@ -1,38 +1,34 @@
 'use client';
 
-import { useParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import FilterTabs from '@/components/admin/FilterTabs';
+import AdminChallengeList from '@/components/admin/AdminChallengeList';
 
-export default function ChallengesPage() {
-  const params = useParams();
-  const challengeId = params.id;
+function ChallengesContent() {
+  const searchParams = useSearchParams();
+  const statusFilter = (searchParams.get('status') as 'all' | 'upcoming' | 'active' | 'past') || 'all';
 
-  // If we're on a specific challenge page, show the detail view
-  // Otherwise, show a welcome/empty state since challenges are in the sidebar
-  if (challengeId) {
-    return null; // Challenge detail will be handled by [id]/page.tsx
-  }
+  const tabItems = [
+    { filter: 'all', label: 'All Challenges' },
+    { filter: 'upcoming', label: 'Upcoming' },
+    { filter: 'active', label: 'Active' },
+    { filter: 'past', label: 'Past' },
+  ];
 
   return (
     <div>
-      <div
-        className="card"
-        style={{
-          padding: '48px 32px',
-          textAlign: 'center',
-          background: '#1a1a1a',
-          borderRadius: '16px',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-        }}
-      >
-        <h2 style={{ marginBottom: '16px', fontSize: '24px', fontWeight: '700', color: '#FFFFFF' }}>
-          Challenges
-        </h2>
-        <p style={{ color: 'rgba(235, 235, 245, 0.6)', fontSize: '15px' }}>
-          Select a challenge from the sidebar to view details, or create a new challenge.
-        </p>
-      </div>
+      <FilterTabs items={tabItems} basePath="/admin/challenges" filterKey="status" defaultFilter="all" />
+      <AdminChallengeList showCreateButton={true} />
     </div>
+  );
+}
+
+export default function ChallengesPage() {
+  return (
+    <Suspense fallback={<div>Loading challenges...</div>}>
+      <ChallengesContent />
+    </Suspense>
   );
 }
 

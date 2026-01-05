@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SearchInput from './SearchInput';
 
@@ -22,10 +22,11 @@ interface AdminChallengeListProps {
 
 export default function AdminChallengeList({ showCreateButton = false }: AdminChallengeListProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const statusFilter = (searchParams.get('status') as 'all' | 'upcoming' | 'active' | 'past') || 'all';
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'upcoming' | 'active' | 'past'>('all');
 
   useEffect(() => {
     fetchChallenges();
@@ -149,41 +150,6 @@ export default function AdminChallengeList({ showCreateButton = false }: AdminCh
             Create Challenge
           </Link>
         )}
-      </div>
-
-      {/* Status Filter */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '8px',
-          marginBottom: '24px',
-          background: '#1a1a1a',
-          padding: '4px',
-          borderRadius: '10px',
-          width: 'fit-content',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-        }}
-      >
-        {(['all', 'upcoming', 'active', 'past'] as const).map((status) => (
-          <button
-            key={status}
-            onClick={() => setStatusFilter(status)}
-            style={{
-              padding: '10px 20px',
-              borderRadius: '8px',
-              border: 'none',
-              background: statusFilter === status ? '#007AFF' : 'transparent',
-              color: statusFilter === status ? '#FFFFFF' : 'rgba(235, 235, 245, 0.6)',
-              fontSize: '15px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              textTransform: 'capitalize',
-            }}
-          >
-            {status}
-          </button>
-        ))}
       </div>
 
       {/* Challenges List */}

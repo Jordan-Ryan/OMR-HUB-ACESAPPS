@@ -12,19 +12,57 @@ export async function GET(
     await requireAdmin();
     const supabase = await createClient();
 
-    // Get enrollment for this user and challenge
-    const { data: enrollment, error: enrollmentError } = await supabase
+    // Get enrollment for this user and challenge - try with join first
+    let { data: enrollment, error: enrollmentError } = await supabase
       .from('challenge_enrollments')
-      .select('*')
+      .select(`
+        *,
+        user:profiles(id, first_name, last_name, nickname, avatar_url),
+        goal:challenge_goals(*)
+      `)
       .eq('challenge_id', params.id)
       .eq('user_id', params.userId)
       .single();
 
+    // If join fails, try basic query and manually fetch user
     if (enrollmentError || !enrollment) {
-      return NextResponse.json(
-        { error: 'Enrollment not found' },
-        { status: 404 }
-      );
+      const { data: enrollmentBasic, error: basicError } = await supabase
+        .from('challenge_enrollments')
+        .select('*')
+        .eq('challenge_id', params.id)
+        .eq('user_id', params.userId)
+        .single();
+
+      if (basicError || !enrollmentBasic) {
+        return NextResponse.json(
+          { error: 'Enrollment not found' },
+          { status: 404 }
+        );
+      }
+
+      // Manually fetch user profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, nickname, avatar_url')
+        .eq('id', params.userId)
+        .single();
+
+      // Manually fetch goal if goal_id exists
+      let goal = null;
+      if (enrollmentBasic.goal_id) {
+        const { data: goalData } = await supabase
+          .from('challenge_goals')
+          .select('*')
+          .eq('id', enrollmentBasic.goal_id)
+          .single();
+        goal = goalData;
+      }
+
+      enrollment = {
+        ...enrollmentBasic,
+        user: profile || null,
+        goal: goal,
+      };
     }
 
     // Fetch all daily check-ins for this enrollment
@@ -86,6 +124,17 @@ export async function GET(
       console.error('Error fetching weekly check-ins:', weeklyError);
     }
 
+    // Fetch enrollment history for this enrollment
+    const { data: enrollmentHistory, error: historyError } = await supabase
+      .from('challenge_enrollment_history')
+      .select('*')
+      .eq('enrollment_id', enrollment.id)
+      .order('effective_date', { ascending: true });
+
+    if (historyError) {
+      console.error('Error fetching enrollment history:', historyError);
+    }
+
     return NextResponse.json({
       enrollment,
       checkins: checkins || [],
@@ -93,6 +142,7 @@ export async function GET(
       weightCheckins: weightCheckins || [],
       physiqueCheckins: physiqueCheckins || [],
       weeklyCheckins: weeklyCheckins || [],
+      enrollmentHistory: enrollmentHistory || [],
     });
   } catch (error) {
     console.error('Error fetching participant check-ins:', error);

@@ -291,6 +291,47 @@ export function FitnessIcon(props: IconProps) {
   );
 }
 
+export function CameraIcon(props: IconProps) {
+  // Ionicons "camera-outline" icon - exact SVG from Ionicons
+  return (
+    <svg 
+      width={props.width || 18} 
+      height={props.height || 18} 
+      viewBox="0 0 512 512"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="32"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={props.style}
+    >
+      <path d="M350.54 148.68l-26.62-42.06C318.31 100.08 310.62 96 302 96h-92c-8.62 0-16.31 4.08-21.92 10.62l-26.62 42.06C155.85 155.23 148.62 160 140 160H80a32 32 0 00-32 32v192a32 32 0 0032 32h352a32 32 0 0032-32V192a32 32 0 00-32-32h-59c-8.65 0-16.85-4.77-22.46-11.32z" fill="none" strokeWidth="32"/>
+      <circle cx="256" cy="272" r="80" fill="none" strokeWidth="32"/>
+      <path d="M124 158v-22h-24v22" fill="none" strokeWidth="32"/>
+    </svg>
+  );
+}
+
+export function ScalesIcon(props: IconProps) {
+  // Ionicons "scale-outline" icon - exact SVG from Ionicons
+  return (
+    <svg 
+      width={props.width || 18} 
+      height={props.height || 18} 
+      viewBox="0 0 512 512"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="32"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={props.style}
+    >
+      <rect x="48" y="48" width="416" height="416" rx="96" fill="none" strokeWidth="32"/>
+      <path d="M388.94 151.56c-24.46-22.28-68.72-51.4-132.94-51.4s-108.48 29.12-132.94 51.4a34.66 34.66 0 00-3.06 48.08l33.32 39.21a26.07 26.07 0 0033.6 5.21c15.92-9.83 40.91-21.64 69.1-21.64s53.18 11.81 69.1 21.64a26.07 26.07 0 0033.6-5.21L392 199.64a34.66 34.66 0 00-3.06-48.08z" fill="none" strokeWidth="32"/>
+    </svg>
+  );
+}
+
 export function BoatIcon(props: IconProps) {
   return (
     <svg {...baseIconProps(props)}>

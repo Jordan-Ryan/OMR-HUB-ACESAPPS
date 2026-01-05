@@ -5,17 +5,11 @@ import { usePathname } from 'next/navigation';
 interface AdminHeaderProps {
   title?: string;
   actionButton?: React.ReactNode;
-  mainSidebarWidth?: string;
-  secondarySidebarWidth?: string;
-  hideTitle?: boolean;
 }
 
 export default function AdminHeader({ 
   title, 
   actionButton,
-  mainSidebarWidth = '280px',
-  secondarySidebarWidth = '0px',
-  hideTitle = false,
 }: AdminHeaderProps) {
   const pathname = usePathname();
 
@@ -26,6 +20,18 @@ export default function AdminHeader({
     if (pathname === '/admin/users' || pathname?.startsWith('/admin/users/')) {
       return 'Users';
     }
+    if (pathname === '/admin/challenges' || pathname?.startsWith('/admin/challenges/')) {
+      return 'Challenges';
+    }
+    if (pathname === '/admin/schedule' || pathname?.startsWith('/admin/schedule/')) {
+      return 'Schedule';
+    }
+    if (pathname === '/admin/events' || pathname?.startsWith('/admin/events/')) {
+      return 'Events';
+    }
+    if (pathname === '/admin/credits' || pathname?.startsWith('/admin/credits/')) {
+      return 'Credits';
+    }
     if (pathname === '/admin/coach/workouts' || pathname?.startsWith('/admin/coach/workouts/')) {
       return 'Workouts';
     }
@@ -35,92 +41,54 @@ export default function AdminHeader({
     if (pathname === '/admin/coach/schedule' || pathname?.startsWith('/admin/coach/schedule/')) {
       return 'PT Schedule';
     }
-    if (pathname === '/admin/credits' || pathname?.startsWith('/admin/credits/')) {
-      return 'Credits';
-    }
     return 'Admin Portal';
   };
 
   return (
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: '72px',
-          background: '#141414',
-          backdropFilter: 'blur(20px)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 32px',
-          paddingLeft: `calc(${mainSidebarWidth} + ${secondarySidebarWidth} + 32px)`,
-          zIndex: 100,
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
-          width: '100%',
-        }}
-        className="admin-header"
-      >
+    <div
+      style={{
+        padding: '24px 32px 0 32px',
+        maxWidth: '1600px',
+        margin: '0 auto',
+      }}
+    >
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          width: '100%',
           gap: '24px',
+          marginBottom: '24px',
         }}
       >
         {/* Page Title */}
-        {!hideTitle && (
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h1
-              style={{
-                fontSize: '24px',
-                fontWeight: '700',
-                color: '#FFFFFF',
-                margin: 0,
-                letterSpacing: '0.37px',
-              }}
-            >
-              {getPageTitle()}
-            </h1>
-          </div>
-        )}
-        {hideTitle && <div style={{ flex: 1, minWidth: 0 }} />}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1
+            style={{
+              fontSize: '28px',
+              fontWeight: '700',
+              color: '#FFFFFF',
+              margin: 0,
+              letterSpacing: '0.37px',
+            }}
+          >
+            {getPageTitle()}
+          </h1>
+        </div>
 
         {/* Right Side Actions */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-          }}
-        >
-          {/* Action Button (if provided) */}
-          {actionButton}
-        </div>
+        {actionButton && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+            }}
+          >
+            {actionButton}
+          </div>
+        )}
       </div>
-
-      <style jsx>{`
-        @media (max-width: 768px) {
-          .admin-header {
-            padding: 0 16px 0 calc(60px + 16px) !important;
-            height: 64px !important;
-          }
-          .admin-header h1 {
-            font-size: 18px !important;
-          }
-        }
-        @media (max-width: 480px) {
-          .admin-header {
-            padding: 0 12px 0 calc(60px + 12px) !important;
-          }
-          .admin-header h1 {
-            font-size: 16px !important;
-          }
-        }
-      `}</style>
-    </header>
+    </div>
   );
 }

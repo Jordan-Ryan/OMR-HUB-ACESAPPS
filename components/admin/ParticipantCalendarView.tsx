@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { WalkIcon, NutritionIcon, BarbellIcon, FitnessIcon } from '@/components/icons/AdminIcons';
+import { WalkIcon, NutritionIcon, BarbellIcon, FitnessIcon, CameraIcon, ScalesIcon } from '@/components/icons/AdminIcons';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -23,6 +23,27 @@ interface DailyCheckin {
   carbs_g: number | null;
   fat_g: number | null;
   workout_details?: WorkoutDetail[] | null;
+  workout_screenshot_url?: string | null;
+  steps_screenshot_url?: string | null;
+  macros_screenshot_url?: string | null;
+}
+
+interface WeightCheckin {
+  id: string;
+  enrollment_id: string;
+  check_in_number: number;
+  weight_kg: number | null;
+  submitted_at: string;
+}
+
+interface PhysiqueCheckin {
+  id: string;
+  enrollment_id: string;
+  check_in_number: number;
+  front_photo_url: string | null;
+  back_photo_url: string | null;
+  side_photo_url: string | null;
+  submitted_at: string;
 }
 
 interface RedDay {
@@ -40,6 +61,10 @@ interface ParticipantCalendarViewProps {
   stepGoal: number;
   getEffectiveValuesForDate: (date: string) => { calories: number; macros: { protein: number; carbs: number; fat: number } | null };
   redDays?: RedDay[];
+  weightCheckins?: WeightCheckin[];
+  physiqueCheckins?: PhysiqueCheckin[];
+  physiqueFrequency?: string;
+  weightMeasurementFrequency?: string;
   onDayClick?: (date: string) => void;
 }
 
@@ -72,7 +97,10 @@ export function ParticipantCalendarView({
   stepGoal,
   getEffectiveValuesForDate,
   redDays = [],
-  onDayClick,
+  weightCheckins = [],
+  physiqueCheckins = [],
+  physiqueFrequency = 'weekly',
+  weightMeasurementFrequency = 'weekly',
 }: ParticipantCalendarViewProps) {
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
@@ -232,6 +260,165 @@ export function ParticipantCalendarView({
     return date.toISOString().split('T')[0];
   };
 
+  // Helper function to get Monday of a week
+  const getMonday = (date: Date): Date => {
+    const d = new Date(date);
+    const day = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+    const monday = new Date(d.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  };
+
+  // Helper function to calculate expected date for a physique check-in based on frequency
+  // check_in_number 1 is on day 1 (start_date), then spaced by frequency
+  const getExpectedPhysiqueDate = (checkInNumber: number): Date | null => {
+    const startDate = enrollmentStartDate || challengeStartDate;
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    
+    // Determine weeks per check-in based on frequency
+    // monthly = 4 weeks, weekly = 1 week, biweekly = 2 weeks (default to weekly)
+    const weeksPerCheckin = physiqueFrequency === 'monthly' ? 4 : (physiqueFrequency === 'biweekly' ? 2 : 1);
+    
+    // Calculate expected date: (check_in_number - 1) * weeksPerCheckin weeks after start_date
+    const expectedDate = new Date(start);
+    expectedDate.setDate(expectedDate.getDate() + (checkInNumber - 1) * weeksPerCheckin * 7);
+    expectedDate.setHours(0, 0, 0, 0);
+    
+    // Only return if within challenge range
+    const challengeEnd = new Date(challengeEndDate);
+    challengeEnd.setHours(23, 59, 59, 999);
+    if (expectedDate > challengeEnd) return null;
+    
+    return expectedDate;
+  };
+
+  // Helper function to calculate expected date for a weight check-in based on frequency
+  // check_in_number 1 is on day 1 (start_date), then spaced by frequency
+  const getExpectedWeightDate = (checkInNumber: number): Date | null => {
+    const startDate = enrollmentStartDate || challengeStartDate;
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    
+    // Determine weeks per check-in based on frequency
+    // biweekly = 2 weeks, weekly = 1 week, monthly = 4 weeks (default to weekly)
+    const weeksPerCheckin = weightMeasurementFrequency === 'biweekly' ? 2 : (weightMeasurementFrequency === 'monthly' ? 4 : 1);
+    
+    // Calculate expected date: (check_in_number - 1) * weeksPerCheckin weeks after start_date
+    const expectedDate = new Date(start);
+    expectedDate.setDate(expectedDate.getDate() + (checkInNumber - 1) * weeksPerCheckin * 7);
+    expectedDate.setHours(0, 0, 0, 0);
+    
+    // Only return if within challenge range
+    const challengeEnd = new Date(challengeEndDate);
+    challengeEnd.setHours(23, 59, 59, 999);
+    if (expectedDate > challengeEnd) return null;
+    
+    return expectedDate;
+  };
+
+  // Helper function to check if physique check-in should be shown and if it's missed (red)
+  const getPhysiqueCheckinStatus = (date: string): { show: boolean; isMissed: boolean } => {
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // First, check if there's a submitted check-in on this date
+    const submittedOnThisDate = physiqueCheckins.some(p => {
+      const physiqueDate = new Date(p.submitted_at);
+      physiqueDate.setHours(0, 0, 0, 0);
+      if (physiqueDate.getTime() === checkDate.getTime()) {
+        return !!(p.front_photo_url || p.back_photo_url || p.side_photo_url);
+      }
+      return false;
+    });
+    
+    if (submittedOnThisDate) {
+      return { show: true, isMissed: false }; // Show on actual submission date, not red
+    }
+    
+    // Check if this date is an expected check-in date (day 1, then every frequency interval)
+    const startDate = enrollmentStartDate || challengeStartDate;
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const weeksPerCheckin = physiqueFrequency === 'monthly' ? 4 : (physiqueFrequency === 'biweekly' ? 2 : 1);
+    
+    // Calculate maximum possible check_in_number (based on days since start and frequency)
+    const daysSinceStart = Math.floor((checkDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+    const maxCheckInNumber = Math.floor(daysSinceStart / (weeksPerCheckin * 7)) + 1;
+    
+    for (let checkInNum = 1; checkInNum <= maxCheckInNumber; checkInNum++) {
+      const expectedDate = getExpectedPhysiqueDate(checkInNum);
+      if (expectedDate && expectedDate.getTime() === checkDate.getTime()) {
+        // This is an expected check-in date
+        const submittedCheckin = physiqueCheckins.find(p => p.check_in_number === checkInNum);
+        
+        if (submittedCheckin) {
+          // Check-in exists - show it if it has photos
+          const hasPhotos = !!(submittedCheckin.front_photo_url || submittedCheckin.back_photo_url || submittedCheckin.side_photo_url);
+          if (hasPhotos) {
+            // Show on the expected date (check-in exists and has photos)
+            return { show: true, isMissed: false };
+          } else if (checkDate <= today) {
+            return { show: true, isMissed: true };
+          }
+        } else if (checkDate <= today) {
+          return { show: true, isMissed: true };
+        }
+      }
+    }
+    
+    return { show: false, isMissed: false };
+  };
+
+  // Helper function to check if weight check-in should be shown and if it's missed (red)
+  const getWeightCheckinStatus = (date: string): { show: boolean; isMissed: boolean } => {
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // First, check if there's a submitted check-in on this date
+    const submittedOnThisDate = weightCheckins.some(w => {
+      const weightDate = new Date(w.submitted_at);
+      weightDate.setHours(0, 0, 0, 0);
+      return weightDate.getTime() === checkDate.getTime();
+    });
+    
+    if (submittedOnThisDate) {
+      return { show: true, isMissed: false }; // Show on actual submission date, not red
+    }
+    
+    // Check if this date is an expected check-in date (day 1, then every frequency interval)
+    const startDate = enrollmentStartDate || challengeStartDate;
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const weeksPerCheckin = weightMeasurementFrequency === 'biweekly' ? 2 : (weightMeasurementFrequency === 'monthly' ? 4 : 1);
+    
+    // Calculate maximum possible check_in_number (based on days since start and frequency)
+    const daysSinceStart = Math.floor((checkDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+    const maxCheckInNumber = Math.floor(daysSinceStart / (weeksPerCheckin * 7)) + 1;
+    
+    for (let checkInNum = 1; checkInNum <= maxCheckInNumber; checkInNum++) {
+      const expectedDate = getExpectedWeightDate(checkInNum);
+      if (expectedDate && expectedDate.getTime() === checkDate.getTime()) {
+        // This is an expected check-in date
+        const submittedCheckin = weightCheckins.find(w => w.check_in_number === checkInNum);
+        
+        if (submittedCheckin) {
+          // Check-in exists - show it on the expected date
+          return { show: true, isMissed: false };
+        } else if (checkDate <= today) {
+          return { show: true, isMissed: true };
+        }
+      }
+    }
+    
+    return { show: false, isMissed: false };
+  };
+
   return (
     <div
       style={{
@@ -339,15 +526,25 @@ export function ParticipantCalendarView({
                 const isRed = isRedDay(dayInfo.date);
                 const hasSteps = checkin && checkin.steps !== null;
                 const hasMacros = checkin && checkin.protein_g !== null && checkin.carbs_g !== null && checkin.fat_g !== null;
+                
+                // Check if check-in is missed (day is in past/today, within challenge range, after enrollment start, but no check-in)
+                const dayDate = new Date(dayInfo.date);
+                dayDate.setHours(0, 0, 0, 0);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const enrollmentStart = enrollmentStartDate ? new Date(enrollmentStartDate) : new Date(challengeStartDate);
+                enrollmentStart.setHours(0, 0, 0, 0);
+                const challengeEnd = new Date(challengeEndDate);
+                challengeEnd.setHours(23, 59, 59, 999);
+                const isMissedCheckin = !checkin && 
+                  dayDate >= enrollmentStart && 
+                  dayDate <= challengeEnd && 
+                  dayDate <= today &&
+                  dayInfo.showIcons;
 
                 return (
                   <div
                     key={dayIndex}
-                    onClick={() => {
-                      if (checkin && onDayClick) {
-                        onDayClick(dateKey);
-                      }
-                    }}
                     style={{
                       flex: 1,
                       display: 'flex',
@@ -358,7 +555,7 @@ export function ParticipantCalendarView({
                       borderRadius: '4px',
                       margin: '0 1px',
                       minHeight: '56px',
-                      backgroundColor: isRed
+                      backgroundColor: isRed || isMissedCheckin
                         ? 'rgba(255, 59, 48, 0.3)'
                         : dayInfo.isCurrentMonth
                         ? isToday
@@ -366,31 +563,14 @@ export function ParticipantCalendarView({
                           : 'rgba(255, 255, 255, 0.03)'
                         : 'rgba(255, 255, 255, 0.01)',
                       opacity: dayInfo.isInChallenge ? 1 : 0.3,
-                      borderWidth: isRed ? 2 : (!dayInfo.isInChallenge ? 1 : 0),
+                      borderWidth: (isRed || isMissedCheckin) ? 2 : (!dayInfo.isInChallenge ? 1 : 0),
                       borderStyle: 'solid',
-                      borderColor: isRed
+                      borderColor: (isRed || isMissedCheckin)
                         ? '#FF3B30'
                         : !dayInfo.isInChallenge
                         ? 'rgba(255, 255, 255, 0.1)'
                         : 'transparent',
-                      cursor: checkin ? 'pointer' : 'default',
-                      transition: 'background-color 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (checkin) {
-                        e.currentTarget.style.backgroundColor = isRed
-                          ? 'rgba(255, 59, 48, 0.4)'
-                          : 'rgba(255, 255, 255, 0.05)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = isRed
-                        ? 'rgba(255, 59, 48, 0.3)'
-                        : dayInfo.isCurrentMonth
-                        ? isToday
-                          ? 'rgba(0, 122, 255, 0.2)'
-                          : 'rgba(255, 255, 255, 0.03)'
-                        : 'rgba(255, 255, 255, 0.01)';
+                      cursor: 'default',
                     }}
                   >
                     {/* Day Number */}
@@ -491,6 +671,38 @@ export function ParticipantCalendarView({
                             )}
                           </div>
                         )}
+
+                        {/* Photo Icon - show if physique check-in was submitted or is due (red if missed) */}
+                        {(() => {
+                          const physiqueStatus = getPhysiqueCheckinStatus(dateKey);
+                          return physiqueStatus.show && (
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              height: '12px',
+                              width: '100%',
+                            }}>
+                              <CameraIcon width={12} height={12} style={{ color: physiqueStatus.isMissed ? '#FF3B30' : '#007AFF' }} />
+                            </div>
+                          );
+                        })()}
+
+                        {/* Scales Icon - show if weight check-in was done or is due (red if missed) */}
+                        {(() => {
+                          const weightStatus = getWeightCheckinStatus(dateKey);
+                          return weightStatus.show && (
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center',
+                              height: '12px',
+                              width: '100%',
+                            }}>
+                              <ScalesIcon width={12} height={12} style={{ color: weightStatus.isMissed ? '#FF3B30' : '#5856D6' }} />
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>

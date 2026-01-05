@@ -150,6 +150,26 @@ export default function ChallengeDetailPage() {
         }}
       >
         <div style={{ flex: 1 }}>
+          <Link
+            href="/admin/challenges"
+            style={{
+              color: '#007AFF',
+              textDecoration: 'none',
+              marginBottom: '24px',
+              display: 'inline-block',
+              fontSize: '17px',
+              fontWeight: '500',
+              transition: 'color 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#0051D5';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#007AFF';
+            }}
+          >
+            ← Back to Challenges
+          </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
             <h1 style={{ margin: 0, fontSize: '28px', fontWeight: '700', color: '#FFFFFF' }}>
               {challenge.title}
@@ -372,6 +392,8 @@ export default function ChallengeDetailPage() {
               challengeId={id} 
               challengeStartDate={challenge.start_at}
               challengeEndDate={challenge.end_at}
+              physiqueFrequency={challenge.physique_frequency || 'weekly'}
+              weightMeasurementFrequency={challenge.weight_measurement_frequency || 'weekly'}
               statusFilter="onboarded"
             />
           </div>
@@ -383,6 +405,8 @@ export default function ChallengeDetailPage() {
               challengeId={id} 
               challengeStartDate={challenge.start_at}
               challengeEndDate={challenge.end_at}
+              physiqueFrequency={challenge.physique_frequency || 'weekly'}
+              weightMeasurementFrequency={challenge.weight_measurement_frequency || 'weekly'}
               statusFilter="pending"
             />
           </div>
