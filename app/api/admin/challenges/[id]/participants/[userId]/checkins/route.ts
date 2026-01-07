@@ -135,6 +135,17 @@ export async function GET(
       console.error('Error fetching enrollment history:', historyError);
     }
 
+    // Fetch weekly workout schedules for this enrollment
+    const { data: weeklyWorkoutSchedules, error: schedulesError } = await supabase
+      .from('challenge_weekly_workout_schedules')
+      .select('*')
+      .eq('enrollment_id', enrollment.id)
+      .order('scheduled_date', { ascending: true });
+
+    if (schedulesError) {
+      console.error('Error fetching weekly workout schedules:', schedulesError);
+    }
+
     return NextResponse.json({
       enrollment,
       checkins: checkins || [],
@@ -143,6 +154,7 @@ export async function GET(
       physiqueCheckins: physiqueCheckins || [],
       weeklyCheckins: weeklyCheckins || [],
       enrollmentHistory: enrollmentHistory || [],
+      weeklyWorkoutSchedules: weeklyWorkoutSchedules || [],
     });
   } catch (error) {
     console.error('Error fetching participant check-ins:', error);

@@ -77,6 +77,17 @@ interface PhysiqueCheckin {
   submitted_at: string;
 }
 
+interface WeeklyWorkoutSchedule {
+  id: string;
+  enrollment_id: string;
+  week_number: number;
+  workout_type: 'weights' | 'cardio';
+  workout_index: number | null;
+  scheduled_date: string;
+  workout_title: string | null;
+  created_at: string;
+}
+
 interface Challenge {
   id: string;
   start_at: string;
@@ -112,6 +123,7 @@ export default function ParticipantDetailPage() {
   const [weightCheckins, setWeightCheckins] = useState<WeightCheckin[]>([]);
   const [physiqueCheckins, setPhysiqueCheckins] = useState<PhysiqueCheckin[]>([]);
   const [enrollmentHistory, setEnrollmentHistory] = useState<EnrollmentHistory[]>([]);
+  const [weeklyWorkoutSchedules, setWeeklyWorkoutSchedules] = useState<WeeklyWorkoutSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditingCalories, setIsEditingCalories] = useState(false);
   const [calorieAdjustment, setCalorieAdjustment] = useState<number>(0);
@@ -167,6 +179,7 @@ export default function ParticipantDetailPage() {
         setWeightCheckins(checkinsData.weightCheckins || []);
         setPhysiqueCheckins(checkinsData.physiqueCheckins || []);
         setEnrollmentHistory(checkinsData.enrollmentHistory || []);
+        setWeeklyWorkoutSchedules(checkinsData.weeklyWorkoutSchedules || []);
       }
     } catch (error) {
       console.error('Error fetching participant data:', error);
@@ -879,6 +892,7 @@ export default function ParticipantDetailPage() {
           physiqueCheckins={physiqueCheckins}
           physiqueFrequency={challenge?.physique_frequency || 'weekly'}
           weightMeasurementFrequency={challenge?.weight_measurement_frequency || 'weekly'}
+          scheduledWorkouts={weeklyWorkoutSchedules}
         />
       )}
 
@@ -892,75 +906,9 @@ export default function ParticipantDetailPage() {
         />
       )}
 
-      {/* Enrollment Details */}
-      <div
-        className="card"
-        style={{
-          padding: '24px',
-          background: '#1a1a1a',
-          borderRadius: '16px',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          marginTop: '24px',
-        }}
-      >
-        <h2 style={{ margin: '0 0 20px 0', fontSize: '20px', fontWeight: '600', color: '#FFFFFF' }}>
-          Enrollment Details
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
-          <div>
-            <div style={{ fontSize: '14px', color: 'rgba(235, 235, 245, 0.6)', marginBottom: '4px' }}>Bodyweight</div>
-            <div style={{ fontSize: '16px', fontWeight: '600', color: '#FFFFFF' }}>
-              {enrollment.bodyweight_kg ? `${enrollment.bodyweight_kg} kg` : 'N/A'}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: '14px', color: 'rgba(235, 235, 245, 0.6)', marginBottom: '4px' }}>Calculated Calories</div>
-            <div style={{ fontSize: '16px', fontWeight: '600', color: '#FFFFFF' }}>
-              {enrollment.calculated_calories ? `${enrollment.calculated_calories} kcal` : 'N/A'}
-            </div>
-          </div>
-          {(enrollment.protein_percent || enrollment.carbs_percent || enrollment.fat_percent) && (
-            <div>
-              <div style={{ fontSize: '14px', color: 'rgba(235, 235, 245, 0.6)', marginBottom: '4px' }}>Macro Split</div>
-              <div style={{ fontSize: '16px', fontWeight: '600', color: '#FFFFFF' }}>
-                {enrollment.protein_percent?.toFixed(0) || 0}% / {enrollment.carbs_percent?.toFixed(0) || 0}% / {enrollment.fat_percent?.toFixed(0) || 0}%
-              </div>
-            </div>
-          )}
-          {enrollment.min_steps && (
-            <div>
-              <div style={{ fontSize: '14px', color: 'rgba(235, 235, 245, 0.6)', marginBottom: '4px' }}>Step Goal</div>
-              <div style={{ fontSize: '16px', fontWeight: '600', color: '#FFFFFF' }}>
-                {enrollment.min_steps.toLocaleString()} steps/day
-              </div>
-            </div>
-          )}
-          <div>
-            <div style={{ fontSize: '14px', color: 'rgba(235, 235, 245, 0.6)', marginBottom: '4px' }}>Enrolled</div>
-            <div style={{ fontSize: '16px', fontWeight: '600', color: '#FFFFFF' }}>
-              {new Date(enrollment.enrolled_at).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-              })}
-            </div>
-          </div>
-          {enrollment.start_date && (
-            <div>
-              <div style={{ fontSize: '14px', color: 'rgba(235, 235, 245, 0.6)', marginBottom: '4px' }}>Start Date</div>
-              <div style={{ fontSize: '16px', fontWeight: '600', color: '#FFFFFF' }}>
-                {new Date(enrollment.start_date).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
+
 
 

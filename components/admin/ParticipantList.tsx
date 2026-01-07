@@ -104,6 +104,16 @@ export default function ParticipantList({
     side_photo_url: string | null;
     submitted_at: string;
   }>>>({});
+  const [weeklyWorkoutSchedulesData, setWeeklyWorkoutSchedulesData] = useState<Record<string, Array<{
+    id: string;
+    enrollment_id: string;
+    week_number: number;
+    workout_type: 'weights' | 'cardio';
+    workout_index: number | null;
+    scheduled_date: string;
+    workout_title: string | null;
+    created_at: string;
+  }>>>({});
   const [loadingCheckins, setLoadingCheckins] = useState(false);
 
   useEffect(() => {
@@ -192,6 +202,7 @@ export default function ParticipantList({
       setEnrollmentHistoryData(data.enrollmentHistory || {});
       setWeightCheckinsData(data.weightCheckins || {});
       setPhysiqueCheckinsData(data.physiqueCheckins || {});
+      setWeeklyWorkoutSchedulesData(data.weeklyWorkoutSchedules || {});
     } catch (error) {
       console.error('Error fetching check-ins:', error);
     } finally {
@@ -821,6 +832,48 @@ export default function ParticipantList({
     }
     
     return { weights: false, cardio: false };
+  };
+
+  // Get scheduled workout status for a date
+  const getScheduledWorkoutStatus = (enrollmentId: string, dateStr: string): 'grey' | 'red' | 'green' | 'orange' | null => {
+    const schedules = weeklyWorkoutSchedulesData[enrollmentId] || [];
+    const scheduledForDate = schedules.filter(s => s.scheduled_date === dateStr);
+    
+    if (scheduledForDate.length === 0) {
+      // Check if there's an unplanned workout completed on this date
+      const checkin = checkinsData[enrollmentId]?.[dateStr];
+      if (checkin && checkin.workout_completed) {
+        return 'orange'; // Unplanned workout completed
+      }
+      return null;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const scheduledDate = new Date(dateStr);
+    scheduledDate.setHours(0, 0, 0, 0);
+    const isPastDue = scheduledDate < today;
+
+    const checkin = checkinsData[enrollmentId]?.[dateStr];
+    const completedOnScheduledDay = checkin && checkin.workout_completed;
+
+    // For scheduled workouts, if completed on the scheduled day, show green
+    if (completedOnScheduledDay) {
+      return 'green';
+    }
+
+    // If past due and not completed, show red
+    if (isPastDue && !completedOnScheduledDay) {
+      return 'red';
+    }
+
+    return 'grey'; // Planned but not yet due/completed
+  };
+
+  // Get scheduled workouts for a date
+  const getScheduledWorkoutsForDate = (enrollmentId: string, dateStr: string): Array<{ workout_type: 'weights' | 'cardio' }> => {
+    const schedules = weeklyWorkoutSchedulesData[enrollmentId] || [];
+    return schedules.filter(s => s.scheduled_date === dateStr);
   };
 
   const getMostRecentWeight = (enrollment: Enrollment): number | null => {
@@ -1929,6 +1982,8 @@ export default function ParticipantList({
                       const stepsStatus = shouldShowIcons ? getStepsStatus(checkin, enrollment.min_steps || null) : 'none';
                       const macrosStatus = shouldShowIcons ? getMacrosStatus(checkin, enrollment, dateStr) : 'none';
                       const workoutIcons = shouldShowIcons ? getWorkoutIcons(checkin) : { weights: false, cardio: false };
+                      const scheduledWorkoutStatus = shouldShowIcons ? getScheduledWorkoutStatus(enrollment.id, dateStr) : null;
+                      const scheduledWorkouts = shouldShowIcons ? getScheduledWorkoutsForDate(enrollment.id, dateStr) : [];
                       const physiqueStatus = shouldShowIcons ? getPhysiqueCheckinStatus(enrollment.id, dateStr, enrollment) : { show: false, isMissed: false };
                       const weightStatus = shouldShowIcons ? getWeightCheckinStatus(enrollment.id, dateStr, enrollment) : { show: false, isMissed: false };
 
@@ -2001,15 +2056,65 @@ export default function ParticipantList({
                                     }} 
                                   />
                                 
-                                {/* Weights Icon - only show if weights workout was done */}
-                                {workoutIcons.weights && (
-                                    <BarbellIcon width={16} height={16} style={{ color: '#34C759' }} />
-                                )}
-                                
-                                {/* Cardio Icon - only show if cardio workout was done */}
-                                {workoutIcons.cardio && (
-                                    <FitnessIcon width={16} height={16} style={{ color: '#34C759' }} />
-                                )}
+                                {/* Workout Icons - show planned sessions or completed workouts */}
+                                {(() => {
+                                  const hasScheduledWorkout = scheduledWorkouts.length > 0;
+                                  
+                                  if (hasScheduledWorkout) {
+                                    // Show scheduled workout status with icons
+                                    const workoutTypes = scheduledWorkouts.map(w => w.workout_type);
+                                    const hasWeights = workoutTypes.includes('weights');
+                                    const hasCardio = workoutTypes.includes('cardio');
+                                    
+                                    let statusColor = 'rgba(255, 255, 255, 0.3)';
+                                    if (scheduledWorkoutStatus === 'green') {
+                                      statusColor = '#34C759';
+                                    } else if (scheduledWorkoutStatus === 'red') {
+                                      statusColor = '#FF3B30';
+                                    } else if (scheduledWorkoutStatus === 'grey') {
+                                      statusColor = 'rgba(255, 255, 255, 0.3)';
+                                    }
+                                    
+                                    return (
+                                      <>
+                                        {hasWeights && (
+                                          <BarbellIcon width={16} height={16} style={{ color: statusColor }} />
+                                        )}
+                                        {hasCardio && (
+                                          <FitnessIcon width={16} height={16} style={{ color: statusColor }} />
+                                        )}
+                                      </>
+                                    );
+                                  } else if (scheduledWorkoutStatus === 'orange') {
+                                    // Unplanned workout completed
+                                    return (
+                                      <>
+                                        {workoutIcons.weights && (
+                                          <BarbellIcon width={16} height={16} style={{ color: '#FF9500' }} />
+                                        )}
+                                        {workoutIcons.cardio && (
+                                          <FitnessIcon width={16} height={16} style={{ color: '#FF9500' }} />
+                                        )}
+                                        {!workoutIcons.weights && !workoutIcons.cardio && (
+                                          <FitnessIcon width={16} height={16} style={{ color: '#FF9500' }} />
+                                        )}
+                                      </>
+                                    );
+                                  } else if (workoutIcons.weights || workoutIcons.cardio) {
+                                    // Regular workout completed (no schedule)
+                                    return (
+                                      <>
+                                        {workoutIcons.weights && (
+                                          <BarbellIcon width={16} height={16} style={{ color: '#34C759' }} />
+                                        )}
+                                        {workoutIcons.cardio && (
+                                          <FitnessIcon width={16} height={16} style={{ color: '#34C759' }} />
+                                        )}
+                                      </>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                                 
                                 {/* Photo Icon - show if physique check-in was submitted or is due (red if missed) */}
                                 {physiqueStatus.show && (

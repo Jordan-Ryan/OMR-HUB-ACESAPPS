@@ -183,6 +183,27 @@ export async function GET(
       physiqueByEnrollment[physique.enrollment_id].push(physique);
     });
 
+    // Fetch weekly workout schedules for all enrollments
+    const { data: weeklyWorkoutSchedules, error: schedulesError } = await supabase
+      .from('challenge_weekly_workout_schedules')
+      .select('*')
+      .in('enrollment_id', enrollmentIds)
+      .order('scheduled_date', { ascending: true });
+
+    if (schedulesError) {
+      console.error('Error fetching weekly workout schedules:', schedulesError);
+      // Don't fail, just log the error
+    }
+
+    // Organize weekly workout schedules by enrollment_id
+    const schedulesByEnrollment: Record<string, Array<any>> = {};
+    (weeklyWorkoutSchedules || []).forEach(schedule => {
+      if (!schedulesByEnrollment[schedule.enrollment_id]) {
+        schedulesByEnrollment[schedule.enrollment_id] = [];
+      }
+      schedulesByEnrollment[schedule.enrollment_id].push(schedule);
+    });
+
     return NextResponse.json({
       checkins: checkinsByEnrollment,
       redDays: redDaysByEnrollment,
@@ -190,6 +211,7 @@ export async function GET(
       enrollmentHistory: historyByEnrollment,
       weightCheckins: weightsByEnrollment,
       physiqueCheckins: physiqueByEnrollment,
+      weeklyWorkoutSchedules: schedulesByEnrollment,
     });
   } catch (error) {
     console.error('Error fetching participant check-ins:', error);
