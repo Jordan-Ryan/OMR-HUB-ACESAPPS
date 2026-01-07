@@ -1,5 +1,4 @@
 export default function HomePage() {
-  const appStoreUrl = 'https://apps.apple.com/gb/app/omr-hub/id6755069825';
   const coachEmailUrl =
     'mailto:OMRHub@acesapps.com?subject=OMR-HUB%20Coach%20Community%20Access';
 
@@ -81,7 +80,7 @@ export default function HomePage() {
 
             <div className="heroActions">
               <a
-                href={appStoreUrl}
+                href="/get-app"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="button button-primary"
@@ -187,7 +186,7 @@ export default function HomePage() {
                   Get in touch
                 </a>
                 <a
-                  href={appStoreUrl}
+                  href="/get-app"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="button button-secondary"

@@ -12,7 +12,6 @@ export default function Navigation() {
   const [adminLink, setAdminLink] = useState({ href: '/admin/login', label: 'Admin Login' });
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const appStoreUrl = 'https://apps.apple.com/gb/app/omr-hub/id6755069825';
 
   useEffect(() => {
     setMounted(true);
@@ -127,7 +126,7 @@ export default function Navigation() {
           </div>
 
           <a
-            href={appStoreUrl}
+            href="/get-app"
             target="_blank"
             rel="noopener noreferrer"
             className="button button-secondary"
