@@ -23,7 +23,7 @@ export default function MarkdownEditor({ value, onChange, placeholder }: Markdow
     const service = new TurndownService();
     // Configure turndown to preserve formatting
     service.addRule('strikethrough', {
-      filter: ['del', 's', 'strike'],
+      filter: ['del', 's', 'strike'] as any,
       replacement: (content) => '~~' + content + '~~'
     });
     return service;
@@ -73,21 +73,6 @@ export default function MarkdownEditor({ value, onChange, placeholder }: Markdow
   return (
     <div>
       <ReactQuill
-        ref={(el) => {
-          quillRef.current = el;
-          if (el) {
-            const quill = el.getEditor();
-            quillInstanceRef.current = quill;
-            // Set up paste handler when Quill is ready
-            const cleanup = setupPasteHandler(quill);
-            // Store cleanup function for later
-            (quill as any).__pasteCleanup = cleanup;
-          } else if (quillInstanceRef.current) {
-            // Cleanup when component unmounts
-            const cleanup = (quillInstanceRef.current as any).__pasteCleanup;
-            if (cleanup) cleanup();
-          }
-        }}
         theme="snow"
         value={htmlContent}
         onChange={handleQuillChange}

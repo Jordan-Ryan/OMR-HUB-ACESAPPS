@@ -145,11 +145,11 @@ export function ParticipantCharts({
     }));
 
   // Calculate steps Y-axis domain
-  const stepsDomain = stepsData.length > 0
+  const stepsDomain: [number, number] = stepsData.length > 0
     ? calculateYAxisDomain(
         stepsData.map(d => d.steps),
         stepGoal ? [stepGoal] : []
-      )
+      ) as [number, number]
     : [0, 10000];
   const stepsTickInterval = calculateTickInterval(stepsDomain);
 
@@ -761,7 +761,7 @@ export function ParticipantCharts({
                   ...tooltipStyle,
                   border: '1px solid rgba(255, 255, 255, 0.1)',
                 }}
-                formatter={(value: number, name: string) => [value, name]}
+                formatter={(value: number | undefined, name: string | undefined) => [value ?? 0, name ?? '']}
               />
               <Bar 
                 dataKey="weights" 

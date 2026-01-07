@@ -667,7 +667,7 @@ export default function ChallengeForm({ challengeId, initialData }: ChallengeFor
       {showCropper && pendingImageFile && (
         <ImageCropper
           imageFile={pendingImageFile}
-          onCropComplete={handleCropComplete}
+          onCrop={handleCropComplete}
           onCancel={handleCropCancel}
         />
       )}
