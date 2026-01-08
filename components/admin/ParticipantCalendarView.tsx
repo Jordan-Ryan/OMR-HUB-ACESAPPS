@@ -157,37 +157,41 @@ export function ParticipantCalendarView({
   }, [scheduledWorkouts]);
 
   // Get scheduled workout status for a date
-  const getScheduledWorkoutStatus = useCallback((dateStr: string): 'grey' | 'red' | 'green' | 'orange' | null => {
+  const getScheduledWorkoutStatus = useCallback((dateStr: string): 'grey' | 'red' | 'green' | 'unscheduled_completed' | null => {
     const scheduledForDate = scheduledWorkouts.filter(s => s.scheduled_date === dateStr);
+    const checkin = checkinsByDate.get(dateStr);
+    const workoutIcons = getWorkoutIcons(checkin);
+    const hasActualWorkout = workoutIcons.weights || workoutIcons.cardio;
+    
     if (scheduledForDate.length === 0) {
-      // Check if there's an unplanned workout completed on this date
-      const checkin = checkinsByDate.get(dateStr);
-      if (checkin && checkin.workout_completed) {
-        return 'orange'; // Unplanned workout completed
+      // No scheduled workout for this date
+      // Only return status if an actual workout was completed (unplanned workout)
+      if (hasActualWorkout) {
+        return 'unscheduled_completed'; // Unplanned workout completed - show as green
       }
-      return null;
+      return null; // No workout scheduled and no workout done - don't show icon
     }
 
+    // There is a scheduled workout
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const scheduledDate = new Date(dateStr);
     scheduledDate.setHours(0, 0, 0, 0);
     const isPastDue = scheduledDate < today;
+    const isToday = scheduledDate.getTime() === today.getTime();
 
-    const checkin = checkinsByDate.get(dateStr);
-    const completedOnScheduledDay = checkin && checkin.workout_completed;
-
-    // For scheduled workouts, if completed on the scheduled day, show green
-    if (completedOnScheduledDay) {
+    // If completed with actual workout details, show green
+    if (hasActualWorkout) {
       return 'green';
     }
 
     // If past due and not completed, show red
-    if (isPastDue && !completedOnScheduledDay) {
+    if (isPastDue && !isToday) {
       return 'red';
     }
 
-    return 'grey'; // Planned but not yet due/completed
+    // Future or today (not completed yet), show grey
+    return 'grey';
   }, [scheduledWorkouts, checkinsByDate]);
 
   const isRedDay = useCallback((date: Date): boolean => {
@@ -744,16 +748,16 @@ export function ParticipantCalendarView({
                             const hasWeights = workoutTypes.includes('weights');
                             const hasCardio = workoutTypes.includes('cardio');
                             
-                            let statusColor = 'rgba(255, 255, 255, 0.3)';
+                            let statusColor = 'rgba(255, 255, 255, 0.3)'; // grey default
                             if (scheduledStatus === 'green') {
-                              statusColor = '#34C759';
+                              statusColor = '#34C759'; // completed
                             } else if (scheduledStatus === 'red') {
-                              statusColor = '#FF3B30';
+                              statusColor = '#FF3B30'; // missed/past due
                             } else if (scheduledStatus === 'grey') {
-                              statusColor = 'rgba(255, 255, 255, 0.3)';
+                              statusColor = 'rgba(255, 255, 255, 0.3)'; // future/today not completed
                             }
                             
-                            // Show icons for scheduled workouts - prefer weights if both exist, otherwise show the type
+                            // Show icons for scheduled workouts
                             return (
                               <div style={{ 
                                 display: 'flex', 
@@ -771,30 +775,8 @@ export function ParticipantCalendarView({
                                 )}
                               </div>
                             );
-                          } else if (scheduledStatus === 'orange') {
-                            // Unplanned workout completed
-                            return (
-                              <div style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center',
-                                height: '12px',
-                                width: '100%',
-                                gap: '2px',
-                              }}>
-                                {workoutStatus.weights && (
-                                  <BarbellIcon width={12} height={12} style={{ color: '#FF9500' }} />
-                                )}
-                                {workoutStatus.cardio && (
-                                  <FitnessIcon width={12} height={12} style={{ color: '#FF9500' }} />
-                                )}
-                                {!workoutStatus.weights && !workoutStatus.cardio && (
-                                  <FitnessIcon width={12} height={12} style={{ color: '#FF9500' }} />
-                                )}
-                              </div>
-                            );
-                          } else if (workoutStatus.weights || workoutStatus.cardio) {
-                            // Regular workout completed (no schedule)
+                          } else if (scheduledStatus === 'unscheduled_completed') {
+                            // Unplanned workout completed on a free day - show as green
                             return (
                               <div style={{ 
                                 display: 'flex', 
@@ -813,6 +795,7 @@ export function ParticipantCalendarView({
                               </div>
                             );
                           }
+                          // No scheduled workout and no workout completed - don't show any icons
                           return null;
                         })()}
 

@@ -13,6 +13,7 @@ interface Enrollment {
   enrolled_at: string;
   start_date?: string | null;
   calculated_calories?: number | null;
+  calorie_adjustment?: number | null;
   protein_percent?: number | null;
   carbs_percent?: number | null;
   fat_percent?: number | null;
@@ -115,10 +116,35 @@ export default function ParticipantList({
     created_at: string;
   }>>>({});
   const [loadingCheckins, setLoadingCheckins] = useState(false);
+  const [editingEnrollment, setEditingEnrollment] = useState<Enrollment | null>(null);
+  const [challengeMultiplier, setChallengeMultiplier] = useState<number | null>(null);
+  const [isCurrentWeek, setIsCurrentWeek] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editData, setEditData] = useState<Record<string, {
+    adjustment: number;
+    totalCalories: number;
+    proteinPercent: number;
+    carbsPercent: number;
+    fatPercent: number;
+  }>>({});
 
   useEffect(() => {
     fetchEnrollments();
+    fetchChallengeMultiplier();
   }, [challengeId]);
+
+  const fetchChallengeMultiplier = async () => {
+    try {
+      const response = await fetch(`/api/admin/challenges/${challengeId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setChallengeMultiplier(data.challenge?.calorie_multiplier || 15);
+      }
+    } catch (error) {
+      console.error('Error fetching challenge multiplier:', error);
+      setChallengeMultiplier(15); // Default fallback
+    }
+  };
 
   useEffect(() => {
     if (enrollments.length > 0) {
@@ -445,6 +471,25 @@ export default function ParticipantList({
       return getMonday(now);
     }
   }, [searchParams, challengeStartDate, challengeEndDate]);
+
+  // Check if we're in the current week - check if today falls within the selected week
+  useEffect(() => {
+    if (!selectedWeekMonday) {
+      setIsCurrentWeek(false);
+      return;
+    }
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const weekStart = new Date(selectedWeekMonday);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    
+    // Check if today is within the selected week
+    const isCurrent = now >= weekStart && now <= weekEnd;
+    setIsCurrentWeek(isCurrent);
+  }, [selectedWeekMonday]);
 
   // Filter days to only show the selected week
   const days = useMemo(() => {
@@ -783,15 +828,47 @@ export default function ParticipantList({
     });
   };
 
-  const getStepsStatus = (checkin: DailyCheckin | undefined, stepGoal: number | null): 'green' | 'red' | 'none' => {
-    if (!checkin || checkin.steps === null || stepGoal === null) return 'none';
-    return checkin.steps >= stepGoal ? 'green' : 'red';
+  const getStepsStatus = (checkin: DailyCheckin | undefined, stepGoal: number | null, dateStr: string): 'green' | 'amber' | 'red' | 'none' => {
+    const checkDate = new Date(dateStr);
+    checkDate.setHours(0, 0, 0, 0);
+    const isFuture = checkDate > today;
+    const isToday = checkDate.getTime() === today.getTime();
+    
+    // Future dates: always grey (no submission yet)
+    if (isFuture) return 'none';
+    
+    // If no submission
+    if (!checkin) {
+      // Grey if today (no submission yet), red if past (missed submission)
+      return isToday ? 'none' : 'red';
+    }
+    
+    // If submission exists, evaluate it normally
+    if (stepGoal === null) return 'none'; // Grey if no goal set
+    if (checkin.steps === null) return 'amber'; // Amber if submitted but no steps data (incomplete)
+    return checkin.steps >= stepGoal ? 'green' : 'amber'; // Amber if submitted but not correct
   };
 
   const getMacrosStatus = (checkin: DailyCheckin | undefined, enrollment: Enrollment, date: string): 'green' | 'amber' | 'red' | 'none' => {
-    if (!checkin || checkin.protein_g === null || checkin.carbs_g === null || checkin.fat_g === null) return 'none';
-    if (!enrollment.calculated_calories || enrollment.calculated_calories <= 0) return 'none';
-    if (checkin.calories_consumed === null) return 'none';
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    const isFuture = checkDate > today;
+    const isToday = checkDate.getTime() === today.getTime();
+    
+    // Future dates: always grey (no submission yet)
+    if (isFuture) return 'none';
+    
+    // If no submission or incomplete submission
+    if (!checkin || checkin.protein_g === null || checkin.carbs_g === null || checkin.fat_g === null) {
+      // Grey if today (no submission yet), red if past (missed submission)
+      return isToday ? 'none' : 'red';
+    }
+    if (!enrollment.calculated_calories || enrollment.calculated_calories <= 0) {
+      return isToday ? 'none' : 'red';
+    }
+    if (checkin.calories_consumed === null) {
+      return isToday ? 'none' : 'red';
+    }
 
     const targetCalories = enrollment.calculated_calories;
     const targetProtein = (targetCalories * (enrollment.protein_percent || 0) / 100) / 4; // 4 cal per gram
@@ -809,8 +886,8 @@ export default function ParticipantList({
                             checkin.calories_consumed <= targetCalories * (1 + leeway);
 
     if (allMacrosInRange && caloriesInRange) return 'green';
-    if (caloriesInRange && !allMacrosInRange) return 'amber';
-    return 'red';
+    // Amber if submitted but not correct (either macros or calories wrong)
+    return 'amber';
   };
 
   const getWorkoutIcons = (checkin: DailyCheckin | undefined): { weights: boolean; cardio: boolean } => {
@@ -835,39 +912,42 @@ export default function ParticipantList({
   };
 
   // Get scheduled workout status for a date
-  const getScheduledWorkoutStatus = (enrollmentId: string, dateStr: string): 'grey' | 'red' | 'green' | 'orange' | null => {
+  const getScheduledWorkoutStatus = (enrollmentId: string, dateStr: string): 'grey' | 'red' | 'green' | 'unscheduled_completed' | null => {
     const schedules = weeklyWorkoutSchedulesData[enrollmentId] || [];
     const scheduledForDate = schedules.filter(s => s.scheduled_date === dateStr);
+    const checkin = checkinsData[enrollmentId]?.[dateStr];
+    const workoutIcons = getWorkoutIcons(checkin);
+    const hasActualWorkout = workoutIcons.weights || workoutIcons.cardio;
     
     if (scheduledForDate.length === 0) {
-      // Check if there's an unplanned workout completed on this date
-      const checkin = checkinsData[enrollmentId]?.[dateStr];
-      if (checkin && checkin.workout_completed) {
-        return 'orange'; // Unplanned workout completed
+      // No scheduled workout for this date
+      // Only return status if an actual workout was completed (unplanned workout)
+      if (hasActualWorkout) {
+        return 'unscheduled_completed'; // Unplanned workout completed - show as green
       }
-      return null;
+      return null; // No workout scheduled and no workout done - don't show icon
     }
 
+    // There is a scheduled workout
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const scheduledDate = new Date(dateStr);
     scheduledDate.setHours(0, 0, 0, 0);
     const isPastDue = scheduledDate < today;
+    const isToday = scheduledDate.getTime() === today.getTime();
 
-    const checkin = checkinsData[enrollmentId]?.[dateStr];
-    const completedOnScheduledDay = checkin && checkin.workout_completed;
-
-    // For scheduled workouts, if completed on the scheduled day, show green
-    if (completedOnScheduledDay) {
+    // If completed with actual workout details, show green
+    if (hasActualWorkout) {
       return 'green';
     }
 
     // If past due and not completed, show red
-    if (isPastDue && !completedOnScheduledDay) {
+    if (isPastDue && !isToday) {
       return 'red';
     }
 
-    return 'grey'; // Planned but not yet due/completed
+    // Future or today (not completed yet), show grey
+    return 'grey';
   };
 
   // Get scheduled workouts for a date
@@ -1656,6 +1736,197 @@ export default function ParticipantList({
               >
                 Next Week →
               </button>
+              {!isCurrentWeek && (
+                <button
+                  onClick={() => {
+                    const now = new Date();
+                    const currentWeekMonday = getMonday(now);
+                    navigateToWeek(currentWeekMonday);
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(0, 122, 255, 0.3)',
+                    background: 'rgba(0, 122, 255, 0.1)',
+                    color: '#007AFF',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 122, 255, 0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(0, 122, 255, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 122, 255, 0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(0, 122, 255, 0.3)';
+                  }}
+                >
+                  Jump to Current Week
+                </button>
+              )}
+              {isCurrentWeek && challengeMultiplier !== null && (
+                <>
+                  {!isEditMode ? (
+                    <button
+                      onClick={() => {
+                        // Initialize edit data for all enrollments
+                        const initialEditData: Record<string, any> = {};
+                        allOnboardedEnrollments.forEach(enrollment => {
+                          const initialCalories = enrollment.bodyweight_kg 
+                            ? Math.round(enrollment.bodyweight_kg * 2.2 * challengeMultiplier)
+                            : 0;
+                          const adjustment = enrollment.calorie_adjustment !== undefined && enrollment.calorie_adjustment !== null
+                            ? enrollment.calorie_adjustment
+                            : (enrollment.calculated_calories ? enrollment.calculated_calories - initialCalories : 0);
+                          const totalCalories = enrollment.calculated_calories || initialCalories + adjustment;
+                          
+                          initialEditData[enrollment.id] = {
+                            adjustment,
+                            totalCalories,
+                            proteinPercent: enrollment.protein_percent || 0,
+                            carbsPercent: enrollment.carbs_percent || 0,
+                            fatPercent: enrollment.fat_percent || 0,
+                          };
+                        });
+                        setEditData(initialEditData);
+                        setIsEditMode(true);
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: '#007AFF',
+                        color: '#FFFFFF',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#0051D5';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#007AFF';
+                      }}
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      {(() => {
+                        // Check if any macros don't equal 100%
+                        const hasMacroErrors = Object.values(editData).some(edit => {
+                          const sum = edit.proteinPercent + edit.carbsPercent + edit.fatPercent;
+                          return Math.abs(sum - 100) > 0.01;
+                        });
+                        
+                        return (
+                          <>
+                            {hasMacroErrors && (
+                              <span style={{ fontSize: '12px', color: '#FF3B30', marginRight: '8px' }}>
+                                Fix macro percentages (must equal 100%)
+                              </span>
+                            )}
+                            <button
+                              onClick={async () => {
+                                // Validate all macros
+                                const hasErrors = Object.values(editData).some(edit => {
+                                  const sum = edit.proteinPercent + edit.carbsPercent + edit.fatPercent;
+                                  return Math.abs(sum - 100) > 0.01;
+                                });
+                                
+                                if (hasErrors) {
+                                  alert('Please fix all macro percentages to equal 100% before saving');
+                                  return;
+                                }
+
+                                try {
+                                  const updates = allOnboardedEnrollments.map(enrollment => {
+                                    const edit = editData[enrollment.id];
+                                    return fetch(
+                                      `/api/admin/challenges/${challengeId}/enrollments/${enrollment.id}`,
+                                      {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          calorie_adjustment: edit.adjustment,
+                                          protein_percent: edit.proteinPercent,
+                                          carbs_percent: edit.carbsPercent,
+                                          fat_percent: edit.fatPercent,
+                                        }),
+                                      }
+                                    );
+                                  });
+
+                                  await Promise.all(updates);
+                                  await fetchEnrollments();
+                                  setIsEditMode(false);
+                                  setEditData({});
+                                } catch (error) {
+                                  console.error('Error updating enrollments:', error);
+                                  alert('Failed to update enrollments');
+                                }
+                              }}
+                              disabled={hasMacroErrors}
+                              style={{
+                                padding: '8px 16px',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: hasMacroErrors ? 'rgba(52, 199, 89, 0.3)' : '#34C759',
+                                color: '#FFFFFF',
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                cursor: hasMacroErrors ? 'not-allowed' : 'pointer',
+                                transition: 'all 0.2s',
+                                opacity: hasMacroErrors ? 0.5 : 1,
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!hasMacroErrors) {
+                                  e.currentTarget.style.background = '#28A745';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!hasMacroErrors) {
+                                  e.currentTarget.style.background = '#34C759';
+                                }
+                              }}
+                            >
+                              Save
+                            </button>
+                          </>
+                        );
+                      })()}
+                      <button
+                        onClick={() => {
+                          setIsEditMode(false);
+                          setEditData({});
+                        }}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          color: '#FFFFFF',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
           <div
@@ -1673,7 +1944,7 @@ export default function ParticipantList({
             style={{
               width: '100%',
               borderCollapse: 'collapse',
-              minWidth: `${180 + 100 + 100 + 120 + (days.length * 60)}px`, // Participant + Weight + Calories + Macros + days
+              minWidth: `${180 + 100 + (isEditMode ? 200 : 100) + 120 + (days.length * 60)}px`, // Participant + Weight + Calories (wider in edit mode) + Macros + days
             }}
           >
             {/* Day Header Row */}
@@ -1815,9 +2086,6 @@ export default function ParticipantList({
                   >
                     {/* Participant Name Column */}
                     <td
-                      onClick={() => {
-                        router.push(`/admin/challenges/${challengeId}/participants/${enrollment.user_id}`);
-                      }}
                       style={{
                         padding: '10px 12px',
                         position: 'sticky',
@@ -1826,14 +2094,6 @@ export default function ParticipantList({
                         zIndex: 9,
                         minWidth: '180px',
                         borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-                        cursor: 'pointer',
-                        transition: 'background-color 0.2s',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#242424';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#1a1a1a';
                       }}
                     >
                       <div
@@ -1847,15 +2107,22 @@ export default function ParticipantList({
                           <img
                             src={enrollment.user.avatar_url}
                             alt={getUserName(enrollment.user)}
+                            onClick={() => {
+                              router.push(`/admin/challenges/${challengeId}/participants/${enrollment.user_id}`);
+                            }}
                             style={{
                               width: '32px',
                               height: '32px',
                               borderRadius: '50%',
                               objectFit: 'cover',
+                              cursor: 'pointer',
                             }}
                           />
                         ) : (
                           <div
+                            onClick={() => {
+                              router.push(`/admin/challenges/${challengeId}/participants/${enrollment.user_id}`);
+                            }}
                             style={{
                               width: '32px',
                               height: '32px',
@@ -1867,6 +2134,7 @@ export default function ParticipantList({
                               fontSize: '12px',
                               fontWeight: '600',
                               color: 'rgba(255, 255, 255, 0.7)',
+                              cursor: 'pointer',
                             }}
                           >
                             {getUserName(enrollment.user)
@@ -1874,7 +2142,15 @@ export default function ParticipantList({
                               .toUpperCase()}
                           </div>
                         )}
-                        <div style={{ flex: 1 }}>
+                        <div 
+                          onClick={() => {
+                            router.push(`/admin/challenges/${challengeId}/participants/${enrollment.user_id}`);
+                          }}
+                          style={{ 
+                            flex: 1,
+                            cursor: 'pointer',
+                          }}
+                        >
                           <div
                             style={{
                               fontSize: '13px',
@@ -1884,8 +2160,8 @@ export default function ParticipantList({
                           >
                             {getUserName(enrollment.user)}
                           </div>
-                                </div>
-                            </div>
+                        </div>
+                      </div>
                     </td>
                     {/* Weight Column */}
                     <td
@@ -1920,20 +2196,119 @@ export default function ParticipantList({
                         left: '280px',
                         background: '#1a1a1a',
                         zIndex: 9,
-                        minWidth: '100px',
+                        minWidth: isEditMode ? '200px' : '100px',
                         borderRight: '1px solid rgba(255, 255, 255, 0.08)',
                       }}
                     >
-                      {(() => {
-                        const majorityCalories = getMajorityOfWeekCalories(enrollment);
-                        return majorityCalories !== null ? (
-                          <div style={{ fontSize: '13px', fontWeight: '600', color: '#FFFFFF' }}>
-                            {majorityCalories}
-                      </div>
-                        ) : (
-                          <div style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.3)' }}>-</div>
-                        );
-                      })()}
+                      {isEditMode && challengeMultiplier !== null && editData[enrollment.id] ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-end' }}>
+                            {/* Calculated Value (Read-only) */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '2px' }}>Calc</div>
+                              <div
+                                style={{
+                                  padding: '4px 6px',
+                                  background: 'rgba(255, 255, 255, 0.05)',
+                                  borderRadius: '4px',
+                                  color: 'rgba(255, 255, 255, 0.5)',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  textAlign: 'center',
+                                }}
+                              >
+                                {(() => {
+                                  const initialCalories = enrollment.bodyweight_kg 
+                                    ? Math.round(enrollment.bodyweight_kg * 2.2 * challengeMultiplier)
+                                    : 0;
+                                  return initialCalories;
+                                })()}
+                              </div>
+                            </div>
+                            {/* Adjustment (Editable) */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '2px' }}>Adj</div>
+                              <input
+                                type="number"
+                                value={editData[enrollment.id].adjustment}
+                                onChange={(e) => {
+                                  const newAdjustment = Number(e.target.value) || 0;
+                                  const initialCalories = enrollment.bodyweight_kg 
+                                    ? Math.round(enrollment.bodyweight_kg * 2.2 * challengeMultiplier)
+                                    : 0;
+                                  const newTotal = initialCalories + newAdjustment;
+                                  setEditData({
+                                    ...editData,
+                                    [enrollment.id]: {
+                                      ...editData[enrollment.id],
+                                      adjustment: newAdjustment,
+                                      totalCalories: Math.round(newTotal),
+                                    },
+                                  });
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '4px 6px',
+                                  background: 'rgba(255, 255, 255, 0.1)',
+                                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                                  borderRadius: '4px',
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  textAlign: 'center',
+                                }}
+                                className="no-spinner"
+                              />
+                            </div>
+                            {/* Total (Editable) */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '2px' }}>Total</div>
+                              <input
+                                type="number"
+                                value={editData[enrollment.id].totalCalories}
+                                onChange={(e) => {
+                                  const newTotal = Number(e.target.value) || 0;
+                                  const initialCalories = enrollment.bodyweight_kg 
+                                    ? Math.round(enrollment.bodyweight_kg * 2.2 * challengeMultiplier)
+                                    : 0;
+                                  const newAdjustment = newTotal - initialCalories;
+                                  setEditData({
+                                    ...editData,
+                                    [enrollment.id]: {
+                                      ...editData[enrollment.id],
+                                      totalCalories: newTotal,
+                                      adjustment: Math.round(newAdjustment),
+                                    },
+                                  });
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '4px 6px',
+                                  background: 'rgba(255, 255, 255, 0.1)',
+                                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                                  borderRadius: '4px',
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  textAlign: 'center',
+                                }}
+                                className="no-spinner"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        (() => {
+                          const majorityCalories = getMajorityOfWeekCalories(enrollment);
+                          return majorityCalories !== null ? (
+                            <div style={{ fontSize: '13px', fontWeight: '600', color: '#FFFFFF' }}>
+                              {majorityCalories}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.3)' }}>-</div>
+                          );
+                        })()
+                      )}
                     </td>
                     {/* Macros Column */}
                     <td
@@ -1948,16 +2323,120 @@ export default function ParticipantList({
                         borderRight: '1px solid rgba(255, 255, 255, 0.08)',
                       }}
                     >
-                      {(() => {
-                        const majorityMacros = getMajorityOfWeekMacros(enrollment);
-                        return majorityMacros !== null ? (
-                          <div style={{ fontSize: '13px', fontWeight: '600', color: '#FFFFFF' }}>
-                            {majorityMacros.protein.toFixed(0)}/{majorityMacros.carbs.toFixed(0)}/{majorityMacros.fat.toFixed(0)}
+                      {isEditMode && editData[enrollment.id] ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <div style={{ display: 'flex', gap: '3px' }}>
+                            <input
+                              type="number"
+                              value={editData[enrollment.id].proteinPercent}
+                              onChange={(e) => {
+                                setEditData({
+                                  ...editData,
+                                  [enrollment.id]: {
+                                    ...editData[enrollment.id],
+                                    proteinPercent: Number(e.target.value) || 0,
+                                  },
+                                });
+                              }}
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              placeholder="P"
+                              style={{
+                                flex: 1,
+                                padding: '3px 4px',
+                                background: 'rgba(255, 255, 255, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                borderRadius: '4px',
+                                color: '#FFFFFF',
+                                fontSize: '10px',
+                                textAlign: 'center',
+                              }}
+                              className="no-spinner"
+                            />
+                            <input
+                              type="number"
+                              value={editData[enrollment.id].carbsPercent}
+                              onChange={(e) => {
+                                setEditData({
+                                  ...editData,
+                                  [enrollment.id]: {
+                                    ...editData[enrollment.id],
+                                    carbsPercent: Number(e.target.value) || 0,
+                                  },
+                                });
+                              }}
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              placeholder="C"
+                              style={{
+                                flex: 1,
+                                padding: '3px 4px',
+                                background: 'rgba(255, 255, 255, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                borderRadius: '4px',
+                                color: '#FFFFFF',
+                                fontSize: '10px',
+                                textAlign: 'center',
+                              }}
+                              className="no-spinner"
+                            />
+                            <input
+                              type="number"
+                              value={editData[enrollment.id].fatPercent}
+                              onChange={(e) => {
+                                setEditData({
+                                  ...editData,
+                                  [enrollment.id]: {
+                                    ...editData[enrollment.id],
+                                    fatPercent: Number(e.target.value) || 0,
+                                  },
+                                });
+                              }}
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              placeholder="F"
+                              style={{
+                                flex: 1,
+                                padding: '3px 4px',
+                                background: 'rgba(255, 255, 255, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                borderRadius: '4px',
+                                color: '#FFFFFF',
+                                fontSize: '10px',
+                                textAlign: 'center',
+                              }}
+                              className="no-spinner"
+                            />
                           </div>
-                        ) : (
-                          <div style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.3)' }}>-</div>
-                        );
-                      })()}
+                          {(() => {
+                            const sum = editData[enrollment.id].proteinPercent + editData[enrollment.id].carbsPercent + editData[enrollment.id].fatPercent;
+                            const isValid = Math.abs(sum - 100) <= 0.01;
+                            return (
+                              <div style={{ 
+                                fontSize: '9px', 
+                                color: isValid ? 'rgba(255, 255, 255, 0.5)' : '#FF3B30',
+                                textAlign: 'center',
+                              }}>
+                                {sum.toFixed(1)}%
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        (() => {
+                          const majorityMacros = getMajorityOfWeekMacros(enrollment);
+                          return majorityMacros !== null ? (
+                            <div style={{ fontSize: '13px', fontWeight: '600', color: '#FFFFFF' }}>
+                              {majorityMacros.protein.toFixed(0)}/{majorityMacros.carbs.toFixed(0)}/{majorityMacros.fat.toFixed(0)}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.3)' }}>-</div>
+                          );
+                        })()
+                      )}
                     </td>
                     {/* Date Cells */}
                     {days.map((day) => {
@@ -1967,19 +2446,20 @@ export default function ParticipantList({
                       const hasCheckin = !!checkin;
                       const isTodayDate = isToday(day.date);
                       
-                      // Show icons for all days within the challenge date range
-                      // The enrollment start date is only used to determine if check-ins are valid, not whether to show icons
+                      // Show icons only for days within the challenge date range AND after enrollment start
                       const dayDate = new Date(dateStr);
                       dayDate.setHours(0, 0, 0, 0);
                       const challengeStart = new Date(challengeStartDate);
                       challengeStart.setHours(0, 0, 0, 0);
                       const challengeEnd = new Date(challengeEndDate);
                       challengeEnd.setHours(23, 59, 59, 999);
+                      const enrollmentStart = enrollment.start_date ? new Date(enrollment.start_date) : challengeStart;
+                      enrollmentStart.setHours(0, 0, 0, 0);
                       
-                      // Show icons for all days in the challenge range
-                      const shouldShowIcons = dayDate >= challengeStart && dayDate <= challengeEnd;
+                      // Show icons only for days in the challenge range AND on or after enrollment start
+                      const shouldShowIcons = dayDate >= challengeStart && dayDate <= challengeEnd && dayDate >= enrollmentStart;
                       
-                      const stepsStatus = shouldShowIcons ? getStepsStatus(checkin, enrollment.min_steps || null) : 'none';
+                      const stepsStatus = shouldShowIcons ? getStepsStatus(checkin, enrollment.min_steps || null, dateStr) : 'none';
                       const macrosStatus = shouldShowIcons ? getMacrosStatus(checkin, enrollment, dateStr) : 'none';
                       const workoutIcons = shouldShowIcons ? getWorkoutIcons(checkin) : { weights: false, cardio: false };
                       const scheduledWorkoutStatus = shouldShowIcons ? getScheduledWorkoutStatus(enrollment.id, dateStr) : null;
@@ -1987,21 +2467,15 @@ export default function ParticipantList({
                       const physiqueStatus = shouldShowIcons ? getPhysiqueCheckinStatus(enrollment.id, dateStr, enrollment) : { show: false, isMissed: false };
                       const weightStatus = shouldShowIcons ? getWeightCheckinStatus(enrollment.id, dateStr, enrollment) : { show: false, isMissed: false };
 
-                      // Determine cell background color - highlight today, red for red days or missed check-ins
+                      // Determine cell background color - red days take precedence over today highlighting
                       let cellBgColor = 'transparent';
                       
-                      // Check if check-in is missed (day is in past/today, within challenge range, after enrollment start, but no check-in)
-                      const enrollmentStart = enrollment.start_date ? new Date(enrollment.start_date) : challengeStart;
-                      enrollmentStart.setHours(0, 0, 0, 0);
-                      const isMissedCheckin = !hasCheckin && 
-                        dayDate >= enrollmentStart && 
-                        dayDate <= challengeEnd && 
-                        dayDate <= today;
-                      
-                      if (isTodayDate) {
-                        cellBgColor = 'rgba(0, 122, 255, 0.1)';
-                      } else if (isRed || isMissedCheckin) {
+                      if (isRed) {
+                        // Red days take precedence - show red background if it was marked as a red day
                         cellBgColor = 'rgba(255, 59, 48, 0.2)';
+                      } else if (isTodayDate) {
+                        // Highlight today only if it's not a red day
+                        cellBgColor = 'rgba(0, 122, 255, 0.1)';
                       }
 
                       return (
@@ -2028,20 +2502,22 @@ export default function ParticipantList({
                           }}>
                             {shouldShowIcons ? (
                               <>
-                                {/* Steps Icon - always show (grey if no data) */}
+                                {/* Steps Icon - red if no submission, amber if submitted but incorrect, green if correct */}
                                   <WalkIcon 
                                     width={16} 
                                     height={16} 
                                     style={{ 
                                       color: stepsStatus === 'green' 
                                         ? '#34C759' 
+                                        : stepsStatus === 'amber' 
+                                        ? '#FF9500' 
                                         : stepsStatus === 'red' 
                                         ? '#FF3B30' 
                                         : 'rgba(255, 255, 255, 0.3)' 
                                     }} 
                                   />
                                 
-                                {/* Macros Icon - always show (grey if no data) */}
+                                {/* Macros Icon - red if no submission, amber if submitted but incorrect, green if correct */}
                                   <NutritionIcon 
                                     width={16} 
                                     height={16} 
@@ -2066,13 +2542,13 @@ export default function ParticipantList({
                                     const hasWeights = workoutTypes.includes('weights');
                                     const hasCardio = workoutTypes.includes('cardio');
                                     
-                                    let statusColor = 'rgba(255, 255, 255, 0.3)';
+                                    let statusColor = 'rgba(255, 255, 255, 0.3)'; // grey default
                                     if (scheduledWorkoutStatus === 'green') {
-                                      statusColor = '#34C759';
+                                      statusColor = '#34C759'; // completed
                                     } else if (scheduledWorkoutStatus === 'red') {
-                                      statusColor = '#FF3B30';
+                                      statusColor = '#FF3B30'; // missed/past due
                                     } else if (scheduledWorkoutStatus === 'grey') {
-                                      statusColor = 'rgba(255, 255, 255, 0.3)';
+                                      statusColor = 'rgba(255, 255, 255, 0.3)'; // future/today not completed
                                     }
                                     
                                     return (
@@ -2085,23 +2561,8 @@ export default function ParticipantList({
                                         )}
                                       </>
                                     );
-                                  } else if (scheduledWorkoutStatus === 'orange') {
-                                    // Unplanned workout completed
-                                    return (
-                                      <>
-                                        {workoutIcons.weights && (
-                                          <BarbellIcon width={16} height={16} style={{ color: '#FF9500' }} />
-                                        )}
-                                        {workoutIcons.cardio && (
-                                          <FitnessIcon width={16} height={16} style={{ color: '#FF9500' }} />
-                                        )}
-                                        {!workoutIcons.weights && !workoutIcons.cardio && (
-                                          <FitnessIcon width={16} height={16} style={{ color: '#FF9500' }} />
-                                        )}
-                                      </>
-                                    );
-                                  } else if (workoutIcons.weights || workoutIcons.cardio) {
-                                    // Regular workout completed (no schedule)
+                                  } else if (scheduledWorkoutStatus === 'unscheduled_completed') {
+                                    // Unplanned workout completed on a free day - show as green
                                     return (
                                       <>
                                         {workoutIcons.weights && (
@@ -2113,6 +2574,7 @@ export default function ParticipantList({
                                       </>
                                     );
                                   }
+                                  // No scheduled workout and no workout completed - don't show any icons
                                   return null;
                                 })()}
                                 
@@ -2201,6 +2663,813 @@ export default function ParticipantList({
           )}
         </div>
       )}
+
+      {/* Edit Enrollment Modal */}
+      {editingEnrollment && challengeMultiplier !== null && (
+        editingEnrollment.id ? (
+          <EditEnrollmentModal
+            enrollment={editingEnrollment}
+            challengeId={challengeId}
+            challengeMultiplier={challengeMultiplier}
+            onClose={() => setEditingEnrollment(null)}
+            onSave={async () => {
+              await fetchEnrollments();
+              setEditingEnrollment(null);
+            }}
+          />
+        ) : (
+          <BulkEditModal
+            enrollments={allOnboardedEnrollments}
+            challengeId={challengeId}
+            challengeMultiplier={challengeMultiplier}
+            onClose={() => setEditingEnrollment(null)}
+            onSave={async () => {
+              await fetchEnrollments();
+              setEditingEnrollment(null);
+            }}
+          />
+        )
+      )}
+    </div>
+  );
+}
+
+// Edit Enrollment Modal Component
+interface EditEnrollmentModalProps {
+  enrollment: Enrollment;
+  challengeId: string;
+  challengeMultiplier: number;
+  onClose: () => void;
+  onSave: () => void;
+}
+
+function EditEnrollmentModal({ enrollment, challengeId, challengeMultiplier, onClose, onSave }: EditEnrollmentModalProps) {
+  const [initialCalories] = useState<number>(() => {
+    if (!enrollment.bodyweight_kg) return 0;
+    return Math.round(enrollment.bodyweight_kg * 2.2 * challengeMultiplier);
+  });
+  const [adjustment, setAdjustment] = useState<number>(() => {
+    // Use calorie_adjustment if available, otherwise calculate from calculated_calories
+    if (enrollment.calorie_adjustment !== undefined && enrollment.calorie_adjustment !== null) {
+      return enrollment.calorie_adjustment;
+    }
+    // Calculate current adjustment from calculated_calories and initial
+    if (enrollment.calculated_calories && enrollment.bodyweight_kg) {
+      const initial = Math.round(enrollment.bodyweight_kg * 2.2 * challengeMultiplier);
+      return enrollment.calculated_calories - initial;
+    }
+    return 0;
+  });
+  const [totalCalories, setTotalCalories] = useState<number>(() => {
+    if (enrollment.calculated_calories) {
+      return enrollment.calculated_calories;
+    }
+    return initialCalories + adjustment;
+  });
+  const [editingTotal, setEditingTotal] = useState(false);
+  const [proteinPercent, setProteinPercent] = useState<number>(enrollment.protein_percent || 0);
+  const [carbsPercent, setCarbsPercent] = useState<number>(enrollment.carbs_percent || 0);
+  const [fatPercent, setFatPercent] = useState<number>(enrollment.fat_percent || 0);
+  const [saving, setSaving] = useState(false);
+  const [macroError, setMacroError] = useState<string>('');
+
+  // Recalculate when adjustment or total changes
+  useEffect(() => {
+    if (!editingTotal) {
+      // If editing adjustment, calculate total
+      const newTotal = initialCalories + adjustment;
+      setTotalCalories(Math.round(newTotal));
+    }
+  }, [adjustment, editingTotal, initialCalories]);
+
+  // When total changes and we're editing total, update adjustment
+  const handleTotalChange = (newTotal: number) => {
+    setTotalCalories(newTotal);
+    const newAdjustment = newTotal - initialCalories;
+    setAdjustment(Math.round(newAdjustment));
+  };
+
+  // When adjustment changes and we're editing adjustment, update total
+  const handleAdjustmentChange = (newAdjustment: number) => {
+    setAdjustment(newAdjustment);
+    const newTotal = initialCalories + newAdjustment;
+    setTotalCalories(Math.round(newTotal));
+  };
+
+  // Validate macros sum to 100%
+  useEffect(() => {
+    const sum = proteinPercent + carbsPercent + fatPercent;
+    if (Math.abs(sum - 100) > 0.01) {
+      setMacroError(`Macros must equal 100% (currently ${sum.toFixed(1)}%)`);
+    } else {
+      setMacroError('');
+    }
+  }, [proteinPercent, carbsPercent, fatPercent]);
+
+  const handleSave = async () => {
+    if (macroError) {
+      alert('Please fix macro percentages to equal 100%');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch(
+        `/api/admin/challenges/${challengeId}/enrollments/${enrollment.id}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            calorie_adjustment: adjustment,
+            protein_percent: proteinPercent,
+            carbs_percent: carbsPercent,
+            fat_percent: fatPercent,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update enrollment');
+      }
+
+      onSave();
+    } catch (error) {
+      console.error('Error updating enrollment:', error);
+      alert(error instanceof Error ? error.message : 'Failed to update enrollment');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#1a1a1a',
+          borderRadius: '16px',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          padding: '24px',
+          maxWidth: '500px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600', color: '#FFFFFF' }}>
+            Edit {enrollment.user?.first_name} {enrollment.user?.last_name}
+          </h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontSize: '24px',
+              cursor: 'pointer',
+              padding: '0',
+              width: '32px',
+              height: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Calories Section */}
+        <div style={{ marginBottom: '24px' }}>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#FFFFFF' }}>
+            Calories
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                Initial Calories
+              </label>
+              <div
+                style={{
+                  padding: '10px 12px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '8px',
+                  color: 'rgba(255, 255, 255, 0.5)',
+                  fontSize: '14px',
+                }}
+              >
+                {initialCalories} (calculated from bodyweight)
+              </div>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                Adjustment
+              </label>
+              <input
+                type="number"
+                value={adjustment}
+                onChange={(e) => {
+                  setEditingTotal(false);
+                  handleAdjustmentChange(Number(e.target.value) || 0);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  color: '#FFFFFF',
+                  fontSize: '14px',
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                Total Calories
+              </label>
+              <input
+                type="number"
+                value={totalCalories}
+                onChange={(e) => {
+                  setEditingTotal(true);
+                  handleTotalChange(Number(e.target.value) || 0);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  color: '#FFFFFF',
+                  fontSize: '14px',
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Macros Section */}
+        <div style={{ marginBottom: '24px' }}>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#FFFFFF' }}>
+            Macro Split (%)
+          </h3>
+          {macroError && (
+            <div style={{ marginBottom: '12px', padding: '8px 12px', background: 'rgba(255, 59, 48, 0.1)', border: '1px solid rgba(255, 59, 48, 0.3)', borderRadius: '8px', color: '#FF3B30', fontSize: '13px' }}>
+              {macroError}
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                Protein %
+              </label>
+              <input
+                type="number"
+                value={proteinPercent}
+                onChange={(e) => setProteinPercent(Number(e.target.value) || 0)}
+                min="0"
+                max="100"
+                step="0.1"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  color: '#FFFFFF',
+                  fontSize: '14px',
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                Carbs %
+              </label>
+              <input
+                type="number"
+                value={carbsPercent}
+                onChange={(e) => setCarbsPercent(Number(e.target.value) || 0)}
+                min="0"
+                max="100"
+                step="0.1"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  color: '#FFFFFF',
+                  fontSize: '14px',
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                Fat %
+              </label>
+              <input
+                type="number"
+                value={fatPercent}
+                onChange={(e) => setFatPercent(Number(e.target.value) || 0)}
+                min="0"
+                max="100"
+                step="0.1"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  color: '#FFFFFF',
+                  fontSize: '14px',
+                }}
+              />
+            </div>
+            <div style={{ padding: '10px 12px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.7)' }}>
+              Total: {(proteinPercent + carbsPercent + fatPercent).toFixed(1)}%
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            style={{
+              padding: '10px 20px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '8px',
+              color: '#FFFFFF',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: saving ? 'not-allowed' : 'pointer',
+              opacity: saving ? 0.5 : 1,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !!macroError}
+            style={{
+              padding: '10px 20px',
+              background: macroError ? 'rgba(255, 59, 48, 0.2)' : '#007AFF',
+              border: 'none',
+              borderRadius: '8px',
+              color: '#FFFFFF',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: saving || macroError ? 'not-allowed' : 'pointer',
+              opacity: saving || macroError ? 0.5 : 1,
+            }}
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Bulk Edit Modal Component
+interface BulkEditModalProps {
+  enrollments: Enrollment[];
+  challengeId: string;
+  challengeMultiplier: number;
+  onClose: () => void;
+  onSave: () => void;
+}
+
+function BulkEditModal({ enrollments, challengeId, challengeMultiplier, onClose, onSave }: BulkEditModalProps) {
+  const getUserName = (user: Enrollment['user']) => {
+    if (!user) return 'Unknown User';
+    const parts = [user.first_name, user.last_name].filter(Boolean);
+    if (parts.length > 0) return parts.join(' ');
+    if (user.nickname) return user.nickname;
+    return 'Unknown User';
+  };
+
+  const [edits, setEdits] = useState<Record<string, {
+    adjustment: number;
+    totalCalories: number;
+    editingTotal: boolean;
+    proteinPercent: number;
+    carbsPercent: number;
+    fatPercent: number;
+    macroError: string;
+  }>>(() => {
+    const initial: Record<string, any> = {};
+    enrollments.forEach(enrollment => {
+      const initialCalories = enrollment.bodyweight_kg 
+        ? Math.round(enrollment.bodyweight_kg * 2.2 * challengeMultiplier)
+        : 0;
+      const adjustment = enrollment.calorie_adjustment !== undefined && enrollment.calorie_adjustment !== null
+        ? enrollment.calorie_adjustment
+        : (enrollment.calculated_calories ? enrollment.calculated_calories - initialCalories : 0);
+      const totalCalories = enrollment.calculated_calories || initialCalories + adjustment;
+      
+      initial[enrollment.id] = {
+        adjustment,
+        totalCalories,
+        editingTotal: false,
+        proteinPercent: enrollment.protein_percent || 0,
+        carbsPercent: enrollment.carbs_percent || 0,
+        fatPercent: enrollment.fat_percent || 0,
+        macroError: '',
+      };
+    });
+    return initial;
+  });
+  const [saving, setSaving] = useState(false);
+
+  // Validate macros for each enrollment
+  useEffect(() => {
+    const updated = { ...edits };
+    Object.keys(updated).forEach(enrollmentId => {
+      const edit = updated[enrollmentId];
+      const sum = edit.proteinPercent + edit.carbsPercent + edit.fatPercent;
+      if (Math.abs(sum - 100) > 0.01) {
+        edit.macroError = `Macros must equal 100% (currently ${sum.toFixed(1)}%)`;
+      } else {
+        edit.macroError = '';
+      }
+    });
+    setEdits(updated);
+  }, [edits]);
+
+  const handleAdjustmentChange = (enrollmentId: string, newAdjustment: number, initialCalories: number) => {
+    const edit = edits[enrollmentId];
+    const newTotal = initialCalories + newAdjustment;
+    setEdits({
+      ...edits,
+      [enrollmentId]: {
+        ...edit,
+        adjustment: newAdjustment,
+        totalCalories: Math.round(newTotal),
+        editingTotal: false,
+      },
+    });
+  };
+
+  const handleTotalChange = (enrollmentId: string, newTotal: number, initialCalories: number) => {
+    const edit = edits[enrollmentId];
+    const newAdjustment = newTotal - initialCalories;
+    setEdits({
+      ...edits,
+      [enrollmentId]: {
+        ...edit,
+        adjustment: Math.round(newAdjustment),
+        totalCalories: newTotal,
+        editingTotal: true,
+      },
+    });
+  };
+
+  const handleSave = async () => {
+    // Check for macro errors
+    const hasErrors = Object.values(edits).some(edit => !!edit.macroError);
+    if (hasErrors) {
+      alert('Please fix all macro percentage errors before saving');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const updates = enrollments.map(enrollment => {
+        const edit = edits[enrollment.id];
+        return fetch(
+          `/api/admin/challenges/${challengeId}/enrollments/${enrollment.id}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              calorie_adjustment: edit.adjustment,
+              protein_percent: edit.proteinPercent,
+              carbs_percent: edit.carbsPercent,
+              fat_percent: edit.fatPercent,
+            }),
+          }
+        );
+      });
+
+      await Promise.all(updates);
+      onSave();
+    } catch (error) {
+      console.error('Error updating enrollments:', error);
+      alert('Failed to update enrollments');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hasErrors = Object.values(edits).some(edit => !!edit.macroError);
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#1a1a1a',
+          borderRadius: '16px',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          padding: '24px',
+          maxWidth: '900px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600', color: '#FFFFFF' }}>
+            Edit All Participants - Current Week
+          </h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontSize: '24px',
+              cursor: 'pointer',
+              padding: '0',
+              width: '32px',
+              height: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '24px' }}>
+          {enrollments.map((enrollment) => {
+            const edit = edits[enrollment.id];
+            const initialCalories = enrollment.bodyweight_kg 
+              ? Math.round(enrollment.bodyweight_kg * 2.2 * challengeMultiplier)
+              : 0;
+
+            return (
+              <div
+                key={enrollment.id}
+                style={{
+                  padding: '16px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                }}
+              >
+                <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#FFFFFF' }}>
+                  {getUserName(enrollment.user)}
+                </h3>
+
+                {/* Calories Section */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Initial Calories
+                      </label>
+                      <div
+                        style={{
+                          padding: '8px 12px',
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          borderRadius: '8px',
+                          color: 'rgba(255, 255, 255, 0.5)',
+                          fontSize: '13px',
+                        }}
+                      >
+                        {initialCalories}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Adjustment
+                      </label>
+                      <input
+                        type="number"
+                        value={edit.adjustment}
+                        onChange={(e) => handleAdjustmentChange(enrollment.id, Number(e.target.value) || 0, initialCalories)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                          fontSize: '13px',
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Total Calories
+                      </label>
+                      <input
+                        type="number"
+                        value={edit.totalCalories}
+                        onChange={(e) => handleTotalChange(enrollment.id, Number(e.target.value) || 0, initialCalories)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                          fontSize: '13px',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Macros Section */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                    Macro Split (%)
+                  </label>
+                  {edit.macroError && (
+                    <div style={{ marginBottom: '8px', padding: '6px 10px', background: 'rgba(255, 59, 48, 0.1)', border: '1px solid rgba(255, 59, 48, 0.3)', borderRadius: '6px', color: '#FF3B30', fontSize: '12px' }}>
+                      {edit.macroError}
+                    </div>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Protein %
+                      </label>
+                      <input
+                        type="number"
+                        value={edit.proteinPercent}
+                        onChange={(e) => {
+                          const newProtein = Number(e.target.value) || 0;
+                          setEdits({
+                            ...edits,
+                            [enrollment.id]: {
+                              ...edit,
+                              proteinPercent: newProtein,
+                            },
+                          });
+                        }}
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                          fontSize: '13px',
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Carbs %
+                      </label>
+                      <input
+                        type="number"
+                        value={edit.carbsPercent}
+                        onChange={(e) => {
+                          const newCarbs = Number(e.target.value) || 0;
+                          setEdits({
+                            ...edits,
+                            [enrollment.id]: {
+                              ...edit,
+                              carbsPercent: newCarbs,
+                            },
+                          });
+                        }}
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                          fontSize: '13px',
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                        Fat %
+                      </label>
+                      <input
+                        type="number"
+                        value={edit.fatPercent}
+                        onChange={(e) => {
+                          const newFat = Number(e.target.value) || 0;
+                          setEdits({
+                            ...edits,
+                            [enrollment.id]: {
+                              ...edit,
+                              fatPercent: newFat,
+                            },
+                          });
+                        }}
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                          fontSize: '13px',
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '8px', padding: '6px 10px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.7)' }}>
+                    Total: {(edit.proteinPercent + edit.carbsPercent + edit.fatPercent).toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            style={{
+              padding: '10px 20px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '8px',
+              color: '#FFFFFF',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: saving ? 'not-allowed' : 'pointer',
+              opacity: saving ? 0.5 : 1,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || hasErrors}
+            style={{
+              padding: '10px 20px',
+              background: hasErrors ? 'rgba(255, 59, 48, 0.2)' : '#007AFF',
+              border: 'none',
+              borderRadius: '8px',
+              color: '#FFFFFF',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: saving || hasErrors ? 'not-allowed' : 'pointer',
+              opacity: saving || hasErrors ? 0.5 : 1,
+            }}
+          >
+            {saving ? 'Saving...' : 'Save All'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
